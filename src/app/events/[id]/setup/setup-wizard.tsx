@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ZapIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Step1Courses } from './step1-courses'
-import { Step2Peloton } from './step2-peloton'
-import { Step3Conditions } from './step3-conditions'
+import { Step2Peloton, type PelotonData } from './step2-peloton'
+import { Step3Conditions, type WeatherData } from './step3-conditions'
 import type { Race, Simulation } from '@prisma/client'
 import { useRouter } from 'next/navigation'
 
@@ -28,6 +28,18 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   const router = useRouter()
   const [step, setStep] = useState<Step>(1)
   const [races, setRaces] = useState(initialRaces)
+  const [launching, setLaunching] = useState(false)
+  const [launchError, setLaunchError] = useState<string | null>(null)
+
+  const pelotonRef = useRef<PelotonData | null>(null)
+  const weatherRef = useRef<WeatherData>({
+    temperature: simulation?.temperature ?? 18,
+    wind: simulation?.wind ?? 0,
+    windDirection: simulation?.windDirection ?? 180,
+    rain: simulation?.rain ?? false,
+    rainIntensity: simulation?.rainIntensity ?? 40,
+    fog: simulation?.fog ?? false,
+  })
 
   function handleNext() {
     if (step < 3) setStep((s) => (s + 1) as Step)
@@ -37,8 +49,56 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
     if (step > 1) setStep((s) => (s - 1) as Step)
   }
 
-  function handleLaunch() {
-    router.push(`/events/${event.id}/simulate`)
+  async function handleLaunch() {
+    setLaunchError(null)
+
+    const racesWithGpx = races.filter((r) => r.gpxPoints && r.gpxPoints !== '[]')
+    if (racesWithGpx.length === 0) {
+      setLaunchError('Importez au moins un fichier GPX (étape 1) avant de lancer la simulation.')
+      setStep(1)
+      return
+    }
+
+    const peloton = pelotonRef.current
+    if (!peloton || peloton.profiles.length === 0) {
+      setLaunchError('Configurez le peloton (étape 2) avant de lancer la simulation.')
+      setStep(2)
+      return
+    }
+
+    const weather = weatherRef.current
+
+    setLaunching(true)
+    try {
+      const res = await fetch(`/api/events/${event.id}/simulations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Simulation ${new Date().toLocaleDateString('fr-FR')}`,
+          eventId: event.id,
+          totalRunners: peloton.totalRunners,
+          temperature: weather.temperature,
+          wind: weather.wind,
+          windDirection: weather.windDirection,
+          rain: weather.rain,
+          rainIntensity: weather.rainIntensity,
+          fog: weather.fog,
+          runnerProfiles: peloton.profiles,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setLaunchError(data.error ?? 'Impossible de créer la simulation.')
+        return
+      }
+
+      router.push(`/events/${event.id}/simulate`)
+    } catch {
+      setLaunchError('Erreur réseau. Veuillez réessayer.')
+    } finally {
+      setLaunching(false)
+    }
   }
 
   return (
@@ -109,7 +169,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               eventId={event.id}
               races={races}
               simulation={simulation}
-              onUpdate={() => {}}
+              onUpdate={(data) => { pelotonRef.current = data }}
             />
           )}
           {step === 3 && (
@@ -117,7 +177,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               eventId={event.id}
               races={races}
               simulation={simulation}
-              onUpdate={() => {}}
+              onUpdate={(w) => { weatherRef.current = w }}
             />
           )}
         </div>
@@ -125,6 +185,19 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
 
       {/* Bottom nav */}
       <footer className="border-t border-[var(--color-line)] bg-[var(--color-bg-1)]">
+        {launchError && (
+          <div className="max-w-5xl mx-auto px-6 pt-3">
+            <p
+              className="text-sm px-3 py-2 rounded-lg"
+              style={{
+                color: 'var(--color-danger)',
+                backgroundColor: 'color-mix(in srgb, var(--color-danger) 10%, transparent)',
+              }}
+            >
+              {launchError}
+            </p>
+          </div>
+        )}
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <Button
             variant="secondary"
@@ -146,9 +219,9 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               <ChevronRightIcon size={16} />
             </Button>
           ) : (
-            <Button variant="primary" onClick={handleLaunch} className="gap-2">
+            <Button variant="primary" onClick={handleLaunch} disabled={launching} className="gap-2">
               <ZapIcon size={15} />
-              Lancer la simulation
+              {launching ? 'Création…' : 'Lancer la simulation'}
               <ChevronRightIcon size={16} />
             </Button>
           )}

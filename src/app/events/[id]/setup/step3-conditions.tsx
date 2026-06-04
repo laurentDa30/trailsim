@@ -1,14 +1,23 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { Race, Simulation } from '@prisma/client'
+
+export interface WeatherData {
+  temperature: number
+  wind: number
+  windDirection: number
+  rain: boolean
+  rainIntensity: number
+  fog: boolean
+}
 
 interface Step3ConditionsProps {
   eventId: string
   races: Race[]
   simulation: Simulation | null
-  onUpdate: () => void
+  onUpdate: (w: WeatherData) => void
 }
 
 const COMPASS_LABELS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
@@ -50,7 +59,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   )
 }
 
-export function Step3Conditions({ eventId, simulation, onUpdate }: Step3ConditionsProps) {
+export function Step3Conditions({ simulation, onUpdate }: Step3ConditionsProps) {
   const [temperature, setTemperature] = useState<number>(
     simulation?.temperature ?? 18
   )
@@ -64,26 +73,15 @@ export function Step3Conditions({ eventId, simulation, onUpdate }: Step3Conditio
 
   const svgRef = useRef<SVGSVGElement>(null)
 
-  async function save(patch: Partial<{
-    temperature: number
-    wind: number
-    windDirection: number
-    rain: boolean
-    rainIntensity: number
-    fog: boolean
-  }>) {
-    try {
-      await fetch(`/api/events/${eventId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...patch,
-        }),
-      })
-      onUpdate()
-    } catch {
-      // silently ignore – UI state is source of truth
-    }
+  // Report the weather configuration up to the wizard whenever it changes.
+  useEffect(() => {
+    onUpdate({ temperature, wind, windDirection: windDir, rain, rainIntensity, fog })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [temperature, wind, windDir, rain, rainIntensity, fog])
+
+  // State is the single source of truth; the wizard persists on launch.
+  function save(_patch?: unknown) {
+    void _patch
   }
 
   function handleWindRoseClick(e: React.MouseEvent<SVGSVGElement>) {

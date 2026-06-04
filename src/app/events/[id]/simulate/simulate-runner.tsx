@@ -128,8 +128,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          resultSnapshot: JSON.stringify(state.result),
-          status: 'DONE',
+          resultSnapshot: state.result,
         }),
       }).catch(() => {
         // silently ignore

@@ -1,10 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronRightIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import type { Race, Simulation } from '@prisma/client'
+import type { RunnerProfile } from '@/lib/validators/simulation'
+
+export interface PelotonData {
+  totalRunners: number
+  profiles: RunnerProfile[]
+}
 
 const DEFAULT_ARCHETYPES = [
   {
@@ -80,10 +86,33 @@ interface Step2PelotonProps {
   eventId: string
   races: Race[]
   simulation: Simulation | null
-  onUpdate: () => void
+  onUpdate: (data: PelotonData) => void
 }
 
-export function Step2Peloton({ races }: Step2PelotonProps) {
+function archetypesToPeloton(configs: Record<string, RaceConfig>): PelotonData {
+  const all = Object.values(configs)
+  const totalRunners = all.reduce((s, c) => s + c.totalRunners, 0)
+  // The Simulation model holds one profile set; use the first race's archetypes.
+  const first = all[0]
+  const profiles: RunnerProfile[] = (first?.archetypes ?? [])
+    .filter((a) => a.percentage > 0)
+    .map((a) => ({
+      label: a.label,
+      percentage: a.percentage,
+      baseSpeedMin: a.speedMin,
+      baseSpeedMax: a.speedMax,
+      climbCoeff: 1.0,
+      descentCoeff: 1.0,
+      fatigueFactor: a.fatiguePlancher / 100,
+      techSkill: a.techLevel / 100,
+      ravitoDuration: a.ravito,
+      abandonRate: a.abandon / 100,
+      color: a.color,
+    }))
+  return { totalRunners: totalRunners || 100, profiles }
+}
+
+export function Step2Peloton({ races, onUpdate }: Step2PelotonProps) {
   const [activeTab, setActiveTab] = useState(0)
   const [configs, setConfigs] = useState<Record<string, RaceConfig>>(() => {
     const init: Record<string, RaceConfig> = {}
@@ -96,6 +125,12 @@ export function Step2Peloton({ races }: Step2PelotonProps) {
     return init
   })
   const [expandedArchetypes, setExpandedArchetypes] = useState<Record<string, boolean>>({})
+
+  // Report the peloton configuration up to the wizard whenever it changes.
+  useEffect(() => {
+    onUpdate(archetypesToPeloton(configs))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configs])
 
   const activeRace = races[activeTab]
   const config = activeRace ? configs[activeRace.id] : null
