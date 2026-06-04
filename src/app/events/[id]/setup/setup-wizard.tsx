@@ -88,6 +88,18 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
 
     setLaunching(true)
     try {
+      // Flush any pending race edits (name/color/startTime) so the simulation
+      // page reads the current wave starts, not stale/debounced values.
+      await Promise.all(
+        races.map((r) =>
+          fetch(`/api/events/${event.id}/races/${r.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: r.name, color: r.color, startTime: r.startTime }),
+          }).catch(() => {})
+        )
+      )
+
       const res = await fetch(`/api/events/${event.id}/simulations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

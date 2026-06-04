@@ -87,10 +87,15 @@ export function Step1Courses({
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  // Persist name/color/startTime changes to the DB (debounced per race).
-  function persistRace(id: string, patch: Partial<Pick<Race, 'name' | 'color' | 'startTime'>>) {
-    clearTimeout(saveTimers.current[id])
-    saveTimers.current[id] = setTimeout(() => {
+  // Persist race scalar fields to the DB. `name` is debounced (typed), while
+  // discrete picks (color, startTime) are persisted immediately so they are
+  // committed before the user launches the simulation.
+  function persistRace(
+    id: string,
+    patch: Partial<Pick<Race, 'name' | 'color' | 'startTime'>>,
+    immediate = false
+  ) {
+    const send = () =>
       fetch(`/api/events/${eventId}/races/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -98,7 +103,12 @@ export function Step1Courses({
       }).catch(() => {
         // UI state is source of truth; ignore transient errors
       })
-    }, 350)
+    clearTimeout(saveTimers.current[id])
+    if (immediate) {
+      send()
+    } else {
+      saveTimers.current[id] = setTimeout(send, 350)
+    }
   }
 
   function updateRace(id: string, updates: Partial<Race>) {
@@ -111,7 +121,11 @@ export function Step1Courses({
     if (updates.name !== undefined) persistable.name = updates.name
     if (updates.color !== undefined) persistable.color = updates.color
     if (updates.startTime !== undefined) persistable.startTime = updates.startTime
-    if (Object.keys(persistable).length > 0) persistRace(id, persistable)
+    if (Object.keys(persistable).length > 0) {
+      // color / startTime are discrete clicks → persist immediately; name is debounced
+      const immediate = updates.name === undefined
+      persistRace(id, persistable, immediate)
+    }
   }
 
   async function handleAddRace() {
