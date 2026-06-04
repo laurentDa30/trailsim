@@ -52,7 +52,7 @@ export default async function DashboardPage() {
     <div className="flex flex-col min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
       <Topbar activePage="dashboard" />
 
-      <main className="flex-1 px-6 py-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-6 pb-8 pt-[calc(52px+2rem)] max-w-7xl mx-auto w-full">
         {/* Page header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
