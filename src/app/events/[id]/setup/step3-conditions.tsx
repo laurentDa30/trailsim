@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { cn } from '@/lib/utils'
 import type { Race, Simulation } from '@prisma/client'
 
 export interface WeatherData {
@@ -42,18 +41,22 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={cn(
-        'relative w-10 h-5 rounded-full transition-colors',
-        checked
-          ? 'bg-[var(--color-lime)]'
-          : 'bg-[var(--color-bg-2)] border border-[var(--color-line)]'
-      )}
+      className="relative inline-flex items-center rounded-full transition-colors shrink-0"
+      style={{
+        width: 40,
+        height: 22,
+        // Always keep a border so the box size is identical in both states
+        border: `1px solid ${checked ? 'var(--color-lime)' : 'var(--color-line)'}`,
+        background: checked ? 'var(--color-lime)' : 'var(--color-bg-2)',
+      }}
     >
       <span
-        className={cn(
-          'absolute top-0.5 w-4 h-4 rounded-full transition-transform bg-white shadow-sm',
-          checked ? 'translate-x-5' : 'translate-x-0.5'
-        )}
+        className="rounded-full bg-white shadow-sm transition-transform"
+        style={{
+          width: 16,
+          height: 16,
+          transform: checked ? 'translateX(20px)' : 'translateX(2px)',
+        }}
       />
     </button>
   )
@@ -107,6 +110,30 @@ export function Step3Conditions({ simulation, onUpdate }: Step3ConditionsProps) 
 
   return (
     <div className="space-y-6">
+      {/* Visible draggable thumb for appearance-none range inputs */}
+      <style>{`
+        .ts-range::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          border-radius: 9999px;
+          background: #fff;
+          border: 2px solid var(--color-lime);
+          box-shadow: 0 1px 3px rgba(0,0,0,.4);
+          cursor: pointer;
+          margin-top: 0;
+        }
+        .ts-range::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          border-radius: 9999px;
+          background: #fff;
+          border: 2px solid var(--color-lime);
+          box-shadow: 0 1px 3px rgba(0,0,0,.4);
+          cursor: pointer;
+        }
+      `}</style>
       <div>
         <h2 className="text-xl font-semibold" style={{ color: 'var(--color-ink)' }}>
           Conditions météo
@@ -145,7 +172,7 @@ export function Step3Conditions({ simulation, onUpdate }: Step3ConditionsProps) 
             value={temperature}
             onChange={(e) => setTemperature(parseInt(e.target.value))}
             onMouseUp={(e) => save({ temperature: parseInt((e.target as HTMLInputElement).value) })}
-            className="w-full h-2 rounded-full appearance-none cursor-pointer"
+            className="ts-range w-full h-2 rounded-full appearance-none cursor-pointer"
             style={{
               background: `linear-gradient(to right,
                 #38BDF8 0%,
@@ -188,8 +215,12 @@ export function Step3Conditions({ simulation, onUpdate }: Step3ConditionsProps) 
             value={wind}
             onChange={(e) => setWind(parseInt(e.target.value))}
             onMouseUp={(e) => save({ wind: parseInt((e.target as HTMLInputElement).value) })}
-            className="w-full h-2 rounded-full appearance-none cursor-pointer"
-            style={{ accentColor: 'var(--color-lime)' }}
+            className="ts-range w-full h-2 rounded-full appearance-none cursor-pointer"
+            style={{
+              background: `linear-gradient(to right, var(--color-lime) 0%, var(--color-lime) ${
+                (wind / 80) * 100
+              }%, var(--color-bg-2) ${(wind / 80) * 100}%)`,
+            }}
           />
 
           {/* Wind rose */}
@@ -305,8 +336,10 @@ export function Step3Conditions({ simulation, onUpdate }: Step3ConditionsProps) 
                 onMouseUp={(e) =>
                   save({ rainIntensity: parseInt((e.target as HTMLInputElement).value) })
                 }
-                className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                style={{ accentColor: '#38BDF8' }}
+                className="ts-range w-full h-2 rounded-full appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, #38BDF8 0%, #38BDF8 ${rainIntensity}%, var(--color-bg-2) ${rainIntensity}%)`,
+                }}
               />
               <p className="text-xs font-medium mt-1" style={{ color: 'var(--color-warning)' }}>
                 ⚠ Terrain glissant
