@@ -47,16 +47,56 @@ interface Step1CoursesProps {
 
 export function Step1Courses({ eventId, races, onUpdate }: Step1CoursesProps) {
   const [localRaces, setLocalRaces] = useState<Race[]>(races)
-  const [gpxStates, setGpxStates] = useState<Record<string, GpxState>>({})
+  // Reflect already-imported GPX tracks (so returning to this step keeps the "imported" state).
+  const [gpxStates, setGpxStates] = useState<Record<string, GpxState>>(() => {
+    const init: Record<string, GpxState> = {}
+    races.forEach((r) => {
+      if (r.gpxPoints && r.gpxPoints !== '[]') {
+        let pointCount = 0
+        try {
+          pointCount = (JSON.parse(r.gpxPoints) as unknown[]).length
+        } catch {
+          pointCount = 0
+        }
+        init[r.id] = {
+          status: 'done',
+          stats: { distance: r.distance, elevGain: r.elevGain, elevLoss: r.elevLoss, pointCount },
+        }
+      }
+    })
+    return init
+  })
   const [effectif, setEffectif] = useState(45)
   const [barrieres, setBarrieres] = useState(20)
   const [adding, setAdding] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  // Persist name/color/startTime changes to the DB (debounced per race).
+  function persistRace(id: string, patch: Partial<Pick<Race, 'name' | 'color' | 'startTime'>>) {
+    clearTimeout(saveTimers.current[id])
+    saveTimers.current[id] = setTimeout(() => {
+      fetch(`/api/events/${eventId}/races/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      }).catch(() => {
+        // UI state is source of truth; ignore transient errors
+      })
+    }, 350)
+  }
 
   function updateRace(id: string, updates: Partial<Race>) {
     const updated = localRaces.map((r) => (r.id === id ? { ...r, ...updates } : r))
     setLocalRaces(updated)
     onUpdate(updated)
+
+    // Only persist the editable scalar fields
+    const persistable: Partial<Pick<Race, 'name' | 'color' | 'startTime'>> = {}
+    if (updates.name !== undefined) persistable.name = updates.name
+    if (updates.color !== undefined) persistable.color = updates.color
+    if (updates.startTime !== undefined) persistable.startTime = updates.startTime
+    if (Object.keys(persistable).length > 0) persistRace(id, persistable)
   }
 
   async function handleAddRace() {
@@ -106,13 +146,15 @@ export function Step1Courses({ eventId, races, onUpdate }: Step1CoursesProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-[var(--color-ink)] mb-1">Courses &amp; Tracés</h2>
+        <h2 className="text-xl font-semibold text-[var(--color-ink)] mb-1">Courses et tracés</h2>
         <p className="text-sm text-[var(--color-ink-3)]">
-          Configurez les courses et chargez les fichiers GPX.
+          Importez un fichier GPX par course. La distance, le D+ et le D− sont calculés
+          automatiquement. Définissez la couleur et l&apos;heure de départ (offset depuis T0 de
+          l&apos;événement).
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {localRaces.map((race) => {
           const gpx = gpxStates[race.id]
           return (
@@ -121,8 +163,8 @@ export function Step1Courses({ eventId, races, onUpdate }: Step1CoursesProps) {
               className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg-1)] p-5 space-y-4"
             >
               {/* Race name + color */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex-1 min-w-[140px]">
                   <input
                     type="text"
                     value={race.name}
@@ -133,7 +175,7 @@ export function Step1Courses({ eventId, races, onUpdate }: Step1CoursesProps) {
                 </div>
 
                 {/* Color swatches */}
-                <div className="flex gap-1.5">
+                <div className="flex gap-1 shrink-0">
                   {COLOR_SWATCHES.map((color) => (
                     <button
                       key={color}

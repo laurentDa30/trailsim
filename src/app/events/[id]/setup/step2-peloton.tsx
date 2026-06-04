@@ -134,6 +134,7 @@ export function Step2Peloton({ races, onUpdate }: Step2PelotonProps) {
 
   const activeRace = races[activeTab]
   const config = activeRace ? configs[activeRace.id] : null
+  const totalAll = Object.values(configs).reduce((s, c) => s + c.totalRunners, 0)
 
   function updateConfig(raceId: string, updates: Partial<RaceConfig>) {
     setConfigs((prev) => ({
@@ -191,7 +192,7 @@ export function Step2Peloton({ races, onUpdate }: Step2PelotonProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-[var(--color-line)]">
+      <div className="flex items-center gap-1 border-b border-[var(--color-line)]">
         {races.map((race, i) => (
           <button
             key={race.id}
@@ -210,17 +211,21 @@ export function Step2Peloton({ races, onUpdate }: Step2PelotonProps) {
               />
               {race.name}
               {config && (
-                <span className="text-[var(--color-ink-4)] font-normal">
+                <span className="text-[var(--color-ink-4)] font-normal tabular-nums">
                   · {configs[race.id]?.totalRunners}
                 </span>
               )}
             </span>
           </button>
         ))}
+        <span className="ml-auto pr-1 text-sm text-[var(--color-ink-3)]">
+          Total{' '}
+          <b className="font-mono text-[var(--color-ink)] tabular-nums">{totalAll}</b> coureurs
+        </span>
       </div>
 
       {activeRace && config && (
-        <div className="grid grid-cols-[1fr_240px] gap-6">
+        <div className="grid grid-cols-[1fr_280px] gap-6">
           <div className="space-y-4">
             {/* Total runners */}
             <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg-1)] p-4">
@@ -433,54 +438,113 @@ export function Step2Peloton({ races, onUpdate }: Step2PelotonProps) {
             </div>
           </div>
 
-          {/* Donut chart */}
-          <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg-1)] p-4 flex flex-col items-center">
-            <div className="flex items-center gap-1.5 mb-3 self-start">
+          {/* Side summary */}
+          <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg-1)] p-4 flex flex-col">
+            <div className="flex items-center gap-1.5 mb-3">
               <SlidersHorizontalIcon size={13} className="text-[var(--color-ink-4)]" />
-              <span className="text-xs font-medium text-[var(--color-ink-3)]">Distribution</span>
+              <span className="text-xs font-semibold text-[var(--color-ink-2)]">
+                {activeRace.name} · Répartition
+              </span>
             </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <PieChart>
-                <Pie
-                  data={config.archetypes.filter((a) => a.percentage > 0)}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  dataKey="percentage"
-                  nameKey="label"
-                  strokeWidth={2}
-                  stroke="var(--color-bg-1)"
-                >
-                  {config.archetypes
-                    .filter((a) => a.percentage > 0)
-                    .map((a) => (
-                      <Cell key={a.id} fill={a.color} />
-                    ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--color-bg-2)',
-                    border: '1px solid var(--color-line)',
-                    borderRadius: '8px',
-                    color: 'var(--color-ink)',
-                    fontSize: '12px',
-                  }}
-                  formatter={(value, name) => [`${value}%`, name as string]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+
+            {/* Donut with centred runner count */}
+            <div className="relative w-full" style={{ height: 180 }}>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={config.archetypes.filter((a) => a.percentage > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    dataKey="percentage"
+                    nameKey="label"
+                    strokeWidth={2}
+                    stroke="var(--color-bg-1)"
+                  >
+                    {config.archetypes
+                      .filter((a) => a.percentage > 0)
+                      .map((a) => (
+                        <Cell key={a.id} fill={a.color} />
+                      ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--color-bg-2)',
+                      border: '1px solid var(--color-line)',
+                      borderRadius: '8px',
+                      color: 'var(--color-ink)',
+                      fontSize: '12px',
+                    }}
+                    formatter={(value, name) => [`${value}%`, name as string]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="font-mono text-2xl font-bold text-[var(--color-ink)] tabular-nums leading-none">
+                  {config.totalRunners}
+                </span>
+                <span className="text-[10px] text-[var(--color-ink-3)] mt-0.5">coureurs</span>
+              </div>
+            </div>
+
+            {/* Legend with count · pct */}
             <div className="w-full space-y-1.5 mt-2">
-              {config.archetypes.map((a) => (
-                <div key={a.id} className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: a.color }} />
-                    <span className="text-[var(--color-ink-3)]">{a.label}</span>
-                  </span>
-                  <span className="text-[var(--color-ink-4)] tabular-nums">{a.percentage}%</span>
-                </div>
-              ))}
+              {config.archetypes.map((a) => {
+                const count = Math.round((config.totalRunners * a.percentage) / 100)
+                return (
+                  <div key={a.id} className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: a.color }} />
+                      <span className="text-[var(--color-ink-3)]">{a.label}</span>
+                    </span>
+                    <span className="text-[var(--color-ink-4)] tabular-nums font-mono">
+                      {count} · {a.percentage}%
+                    </span>
+                  </div>
+                )
+              })}
             </div>
+
+            {/* Comparaison inter-courses */}
+            <div className="mt-4 pt-3 border-t border-[var(--color-line)]">
+              <span className="text-xs font-semibold text-[var(--color-ink-2)]">Comparaison</span>
+              <div className="mt-2.5 space-y-2.5">
+                {races.map((r) => {
+                  const rc = configs[r.id]
+                  if (!rc) return null
+                  const sum = rc.archetypes.reduce((s, a) => s + a.percentage, 0) || 1
+                  return (
+                    <div key={r.id}>
+                      <div className="flex items-center justify-between mb-1 text-[11px]">
+                        <span className="font-semibold" style={{ color: r.color }}>
+                          {r.name}
+                        </span>
+                        <span className="font-mono text-[var(--color-ink-3)] tabular-nums">
+                          {rc.totalRunners} crs
+                        </span>
+                      </div>
+                      <div className="flex h-[5px] rounded-full overflow-hidden bg-[var(--color-bg-2)]">
+                        {rc.archetypes.map((a) => (
+                          <span
+                            key={a.id}
+                            style={{
+                              flex: a.percentage / sum,
+                              backgroundColor: a.color,
+                              opacity: 0.85,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <p className="mt-3 text-[11px] leading-relaxed text-[var(--color-ink-4)]">
+              Cliquez ▸ pour éditer les paramètres physiques. Partagés entre toutes les courses.
+            </p>
           </div>
         </div>
       )}
