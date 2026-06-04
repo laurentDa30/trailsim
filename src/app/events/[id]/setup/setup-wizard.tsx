@@ -46,9 +46,9 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
       {/* Header */}
       <header className="border-b border-[var(--color-line)] bg-[var(--color-bg-1)]">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-4">
-          <span className="text-[var(--color-ink-3)] text-sm">TrailSim</span>
+          <a href="/dashboard" className="text-[var(--color-ink-3)] text-sm hover:text-[var(--color-ink)] transition-colors">TrailSim</a>
           <span className="text-[var(--color-line)]">/</span>
-          <span className="text-[var(--color-ink-2)] text-sm">{event.name}</span>
+          <a href="/dashboard" className="text-[var(--color-ink-2)] text-sm hover:text-[var(--color-ink)] transition-colors">{event.name}</a>
           <span className="text-[var(--color-line)]">/</span>
           <span className="text-[var(--color-ink)] text-sm font-medium">Configuration</span>
         </div>
