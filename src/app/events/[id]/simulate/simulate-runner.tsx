@@ -15,7 +15,9 @@ interface SimulateRunnerProps {
     totalRunners: number
     temperature: number
     wind: number
+    windDirection: number
     rain: boolean
+    rainIntensity: number
     fog: boolean
     runnerProfiles: RunnerProfile[]
   }
@@ -94,7 +96,8 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
         id: r.id,
         name: r.name,
         color: r.color,
-        startOffset: r.startTime,
+        // startTime is stored in minutes (T+30 min); the engine works in seconds.
+        startOffset: r.startTime * 60,
         totalRunners: runnersPerRace,
         gpxPoints: (() => {
           try {
@@ -108,9 +111,10 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
       weather: {
         temperature: simulation.temperature,
         wind: simulation.wind,
-        windDirection: 180,
+        windDirection: simulation.windDirection,
+        // DB stores rainIntensity as 0–100; the engine expects 0–1.
+        rainIntensity: simulation.rain ? simulation.rainIntensity / 100 : 0,
         rain: simulation.rain,
-        rainIntensity: simulation.rain ? 50 : 0,
         fog: simulation.fog,
       },
       stepSeconds: 60,

@@ -49,7 +49,9 @@ export default async function SimulatePage({ params }: PageProps) {
     totalRunners: simulation.totalRunners,
     temperature: simulation.temperature,
     wind: simulation.wind,
+    windDirection: simulation.windDirection,
     rain: simulation.rain,
+    rainIntensity: simulation.rainIntensity,
     fog: simulation.fog,
     runnerProfiles: simulation.runnerProfiles,
   }
