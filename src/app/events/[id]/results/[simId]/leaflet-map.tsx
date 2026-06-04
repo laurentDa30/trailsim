@@ -1,9 +1,21 @@
 'use client'
 
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet'
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  CircleMarker,
+  Tooltip,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet'
+import L from 'leaflet'
 import { useEffect } from 'react'
 import 'leaflet/dist/leaflet.css'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
+import { logiTypeOf, type PlacedLogi } from './logistics'
 
 interface RunnerData {
   runnerId: string
@@ -26,6 +38,45 @@ interface LeafletMapProps {
   runnersData?: RunnerData[]
   timeIndex?: number
   showRunners?: boolean
+  placedLogistics?: PlacedLogi[]
+  placementType?: string | null
+  onPlace?: (lat: number, lng: number) => void
+  onMoveLogi?: (id: string, lat: number, lng: number) => void
+  onRemoveLogi?: (id: string) => void
+}
+
+/** Builds a coloured, lettered divIcon for a logistics marker. */
+function logiDivIcon(letter: string, color: string): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:22px;height:22px;border-radius:50%;background:${color};border:2px solid #14110f;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;font-family:Inter,sans-serif">${letter}</div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    popupAnchor: [0, -12],
+  })
+}
+
+/** Captures map clicks while in placement mode and toggles a crosshair cursor. */
+function PlacementHandler({
+  placementType,
+  onPlace,
+}: {
+  placementType?: string | null
+  onPlace?: (lat: number, lng: number) => void
+}) {
+  const map = useMapEvents({
+    click(e) {
+      if (placementType && onPlace) onPlace(e.latlng.lat, e.latlng.lng)
+    },
+  })
+  useEffect(() => {
+    const container = map.getContainer()
+    container.style.cursor = placementType ? 'crosshair' : ''
+    return () => {
+      container.style.cursor = ''
+    }
+  }, [placementType, map])
+  return null
 }
 
 /** Flies the map to the highlighted segment whenever it changes. */
@@ -84,6 +135,11 @@ export default function LeafletMap({
   runnersData = [],
   timeIndex = 0,
   showRunners = true,
+  placedLogistics = [],
+  placementType = null,
+  onPlace,
+  onMoveLogi,
+  onRemoveLogi,
 }: LeafletMapProps) {
   // Compute center from first race with points
   const firstPoints = races.find((r) => r.gpxPoints.length > 0)?.gpxPoints
@@ -189,6 +245,56 @@ export default function LeafletMap({
                 </span>
               </Tooltip>
             </CircleMarker>
+          )
+        })}
+
+        {/* Click-to-place handler */}
+        <PlacementHandler placementType={placementType} onPlace={onPlace} />
+
+        {/* Placed logistics markers (draggable) */}
+        {placedLogistics.map((logi) => {
+          const meta = logiTypeOf(logi.type)
+          return (
+            <Marker
+              key={logi.id}
+              position={[logi.lat, logi.lng]}
+              icon={logiDivIcon(meta.letter, meta.color)}
+              draggable
+              eventHandlers={{
+                dragend: (e) => {
+                  const m = e.target as L.Marker
+                  const ll = m.getLatLng()
+                  onMoveLogi?.(logi.id, ll.lat, ll.lng)
+                },
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 140 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4, color: meta.color }}>
+                    {meta.label}
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
+                    {logi.lat.toFixed(5)}, {logi.lng.toFixed(5)}
+                  </div>
+                  <button
+                    onClick={() => onRemoveLogi?.(logi.id)}
+                    style={{
+                      marginTop: 8,
+                      width: '100%',
+                      padding: '4px 8px',
+                      borderRadius: 6,
+                      border: '1px solid #DC2626',
+                      background: '#DC262611',
+                      color: '#DC2626',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
           )
         })}
       </MapContainer>

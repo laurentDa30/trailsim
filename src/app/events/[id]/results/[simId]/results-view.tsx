@@ -6,6 +6,12 @@ import Link from 'next/link'
 import { ElevationProfile } from './elevation-profile'
 import { Timeline } from './timeline'
 import {
+  LOGI_TYPES,
+  logiStorageKey,
+  logiTypeOf,
+  type PlacedLogi,
+} from './logistics'
+import {
   ArrowLeftIcon,
   FileTextIcon,
   MapIcon,
@@ -18,6 +24,9 @@ import {
   BarChart3Icon,
   FlagIcon,
   TrendingDownIcon,
+  MapPinIcon,
+  Trash2Icon,
+  XIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { RiskBadge } from '@/components/layout/risk-badge'
@@ -180,6 +189,56 @@ export function ResultsView({
   const [playing, setPlaying] = useState(false)
   const [showRunners, setShowRunners] = useState(true)
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // --- Interactive logistics placement (persisted to localStorage) ---
+  const [placedLogistics, setPlacedLogistics] = useState<PlacedLogi[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = localStorage.getItem(logiStorageKey(simulation.id))
+      return raw ? (JSON.parse(raw) as PlacedLogi[]) : []
+    } catch {
+      return []
+    }
+  })
+  const [placementType, setPlacementType] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(logiStorageKey(simulation.id), JSON.stringify(placedLogistics))
+    } catch {
+      /* quota */
+    }
+  }, [placedLogistics, simulation.id])
+
+  const placeLogi = useCallback(
+    (lat: number, lng: number) => {
+      setPlacementType((type) => {
+        if (!type) return null
+        const id =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `logi-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        setPlacedLogistics((prev) => [...prev, { id, type, lat, lng }])
+        return null // exit placement mode after a single placement
+      })
+    },
+    []
+  )
+
+  const moveLogi = useCallback((id: string, lat: number, lng: number) => {
+    setPlacedLogistics((prev) => prev.map((l) => (l.id === id ? { ...l, lat, lng } : l)))
+  }, [])
+
+  const removeLogi = useCallback((id: string) => {
+    setPlacedLogistics((prev) => prev.filter((l) => l.id !== id))
+  }, [])
+
+  // Count placed logistics per type
+  const logiCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const l of placedLogistics) counts[l.type] = (counts[l.type] ?? 0) + 1
+    return counts
+  }, [placedLogistics])
 
   useEffect(() => {
     if (!playing) {
@@ -352,7 +411,41 @@ export function ResultsView({
               runnersData={runnersData}
               timeIndex={timeIndex}
               showRunners={showRunners}
+              placedLogistics={placedLogistics}
+              placementType={placementType}
+              onPlace={placeLogi}
+              onMoveLogi={moveLogi}
+              onRemoveLogi={removeLogi}
             />
+
+            {/* Placement-mode banner */}
+            {placementType && (
+              <div
+                className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg"
+                style={{
+                  background: 'var(--color-bg-1)',
+                  border: '1px solid var(--color-lime)',
+                  color: 'var(--color-ink)',
+                }}
+              >
+                <MapPinIcon size={14} style={{ color: 'var(--color-lime)' }} />
+                <span className="text-xs font-medium">
+                  Cliquez sur la carte pour placer&nbsp;:{' '}
+                  <b style={{ color: logiTypeOf(placementType).color }}>
+                    {logiTypeOf(placementType).label}
+                  </b>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPlacementType(null)}
+                  className="ml-1"
+                  style={{ color: 'var(--color-ink-4)' }}
+                  aria-label="Annuler"
+                >
+                  <XIcon size={14} />
+                </button>
+              </div>
+            )}
           </div>
           <ElevationProfile races={races} riskMap={riskMap} visibleRaces={visibleRaces} />
         </div>
@@ -651,6 +744,95 @@ export function ResultsView({
                 label="Zones détectées"
                 value={String(riskMap.length)}
               />
+            </div>
+          </Section>
+
+          {/* LOGISTIQUE TERRAIN section */}
+          <Section
+            icon={<MapPinIcon size={12} />}
+            label="Logistique terrain"
+            count={placedLogistics.length}
+          >
+            <div className="p-3 flex flex-col gap-3">
+              <p className="text-[10px]" style={{ color: 'var(--color-ink-4)' }}>
+                Choisissez un type puis cliquez sur la carte. Les marqueurs sont déplaçables et
+                sauvegardés automatiquement.
+              </p>
+
+              {/* Type buttons */}
+              <div className="grid grid-cols-2 gap-1.5">
+                {LOGI_TYPES.map((t) => {
+                  const active = placementType === t.type
+                  return (
+                    <button
+                      key={t.type}
+                      type="button"
+                      onClick={() => setPlacementType((cur) => (cur === t.type ? null : t.type))}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors"
+                      style={{
+                        background: active ? 'var(--color-bg-2)' : 'transparent',
+                        border: '1px solid',
+                        borderColor: active ? t.color : 'var(--color-line)',
+                      }}
+                    >
+                      <span
+                        className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold text-white"
+                        style={{ background: t.color }}
+                      >
+                        {t.letter}
+                      </span>
+                      <span className="flex-1 text-xs" style={{ color: 'var(--color-ink-2)' }}>
+                        {t.label}
+                      </span>
+                      {(logiCounts[t.type] ?? 0) > 0 && (
+                        <span
+                          className="text-[10px] font-mono"
+                          style={{ color: 'var(--color-ink-4)' }}
+                        >
+                          ×{logiCounts[t.type]}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Placed list */}
+              {placedLogistics.length > 0 && (
+                <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: 'var(--color-line)' }}>
+                  {placedLogistics.map((l) => {
+                    const meta = logiTypeOf(l.type)
+                    return (
+                      <div key={l.id} className="flex items-center gap-2 px-1 py-1">
+                        <span
+                          className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold text-white"
+                          style={{ background: meta.color }}
+                        >
+                          {meta.letter}
+                        </span>
+                        <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-ink-3)' }}>
+                          {meta.label}
+                        </span>
+                        <span
+                          className="text-[10px] font-mono"
+                          style={{ color: 'var(--color-ink-4)' }}
+                        >
+                          {l.lat.toFixed(3)}, {l.lng.toFixed(3)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeLogi(l.id)}
+                          style={{ color: 'var(--color-ink-4)' }}
+                          aria-label="Supprimer"
+                          className="hover:text-[var(--color-danger)] transition-colors"
+                        >
+                          <Trash2Icon size={12} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </Section>
 
