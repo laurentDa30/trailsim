@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
 
 interface ElevationProfileProps {
@@ -13,6 +13,10 @@ interface ElevationProfileProps {
   riskMap: RiskMapEntry[]
   visibleRaces: Set<string>
   height?: number
+  /** Leader distance (km) at the current time → vertical progress cursor. */
+  cursorDist?: number
+  /** Called with a [lat,lng] while hovering (null on leave). */
+  onHover?: (point: [number, number] | null) => void
 }
 
 const MAX_PTS = 320
@@ -27,22 +31,47 @@ function sample(points: GPXPoint[]): GPXPoint[] {
   return out
 }
 
+/** Find the [lat,lng] at a given cumulative distance (km) along a track. */
+function latLngAtDist(points: GPXPoint[], dist: number): [number, number] | null {
+  if (points.length === 0) return null
+  if (dist <= points[0].dist) return [points[0].lat, points[0].lng]
+  const last = points[points.length - 1]
+  if (dist >= last.dist) return [last.lat, last.lng]
+  // linear scan (tracks are pre-sized; fine for a hover handler)
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].dist >= dist) {
+      const a = points[i - 1]
+      const b = points[i]
+      const span = b.dist - a.dist
+      const t = span > 0 ? (dist - a.dist) / span : 0
+      return [a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t]
+    }
+  }
+  return [last.lat, last.lng]
+}
+
 /**
- * Multi-race altimetry band. Each visible race is plotted as an area on a
- * shared distance/altitude scale; risk zones are marked along the baseline.
+ * Multi-race altimetry band with a progress cursor and a hover cursor that
+ * reports the matching trace point back to the parent (shown on the map).
  */
 export function ElevationProfile({
   races,
   riskMap,
   visibleRaces,
   height = 178,
+  cursorDist,
+  onHover,
 }: ElevationProfileProps) {
   const W = 1000
   const H = 100
   const padTop = 8
   const padBottom = 16
 
-  const { paths, minAlt, maxAlt, maxDist, riskMarks } = useMemo(() => {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [hoverX, setHoverX] = useState<number | null>(null)
+  const lastHoverRef = useRef<number>(0)
+
+  const { paths, minAlt, maxAlt, maxDist, riskMarks, hoverTrack } = useMemo(() => {
     const visible = races.filter((r) => visibleRaces.has(r.id) && r.gpxPoints.length > 1)
     let minA = Infinity
     let maxA = -Infinity
@@ -82,11 +111,24 @@ export function ElevationProfile({
         const race = races.find((rr) => rr.id === e.raceId)
         const pt = race?.gpxPoints[e.segmentIndex]
         if (!pt) return null
-        return { x: xOf(pt.dist), score: e.riskScore, dist: pt.dist }
+        return { x: xOf(pt.dist), score: e.riskScore }
       })
-      .filter((m): m is { x: number; score: number; dist: number } => m !== null)
+      .filter((m): m is { x: number; score: number } => m !== null)
 
-    return { paths: built, minAlt: minA, maxAlt: maxA, maxDist: maxD, riskMarks: marks }
+    // Longest visible track drives the hover marker
+    const longest = visible.reduce<GPXPoint[]>(
+      (best, r) => (r.gpxPoints.length > best.length ? r.gpxPoints : best),
+      [] as GPXPoint[]
+    )
+
+    return {
+      paths: built,
+      minAlt: minA,
+      maxAlt: maxA,
+      maxDist: maxD,
+      riskMarks: marks,
+      hoverTrack: longest,
+    }
   }, [races, visibleRaces, riskMap])
 
   function riskColor(score: number) {
@@ -94,6 +136,27 @@ export function ElevationProfile({
     if (score >= 0.5) return 'var(--color-warning)'
     return 'var(--color-safe)'
   }
+
+  function handleMove(e: React.MouseEvent) {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect || rect.width === 0) return
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    setHoverX(frac * W)
+    // Throttle the parent/map update to ~30fps to avoid re-rendering all markers
+    const now = Date.now()
+    if (now - lastHoverRef.current < 33) return
+    lastHoverRef.current = now
+    onHover?.(latLngAtDist(hoverTrack, frac * maxDist))
+  }
+
+  function handleLeave() {
+    setHoverX(null)
+    onHover?.(null)
+  }
+
+  const cursorX =
+    cursorDist != null && cursorDist > 0 ? Math.min(W, (cursorDist / maxDist) * W) : null
+  const hoverDistKm = hoverX != null ? (hoverX / W) * maxDist : null
 
   return (
     <div
@@ -119,39 +182,35 @@ export function ElevationProfile({
             </span>
           </span>
         ))}
+        {hoverDistKm != null && (
+          <span className="text-[10px] font-mono" style={{ color: 'var(--color-lime)' }}>
+            km {hoverDistKm.toFixed(1)}
+          </span>
+        )}
       </div>
 
-      {/* Altitude axis labels */}
-      <div
-        className="absolute right-3 top-6 text-[10px] font-mono"
-        style={{ color: 'var(--color-ink-4)' }}
-      >
+      {/* Altitude / distance axis labels */}
+      <div className="absolute right-3 top-6 text-[10px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
         {Math.round(maxAlt)} m
       </div>
-      <div
-        className="absolute right-3 text-[10px] font-mono"
-        style={{ color: 'var(--color-ink-4)', bottom: 22 }}
-      >
+      <div className="absolute right-3 text-[10px] font-mono" style={{ color: 'var(--color-ink-4)', bottom: 22 }}>
         {Math.round(minAlt)} m
       </div>
-      <div
-        className="absolute left-4 text-[10px] font-mono"
-        style={{ color: 'var(--color-ink-4)', bottom: 4 }}
-      >
+      <div className="absolute left-4 text-[10px] font-mono" style={{ color: 'var(--color-ink-4)', bottom: 4 }}>
         0 km
       </div>
-      <div
-        className="absolute right-3 text-[10px] font-mono"
-        style={{ color: 'var(--color-ink-4)', bottom: 4 }}
-      >
+      <div className="absolute right-3 text-[10px] font-mono" style={{ color: 'var(--color-ink-4)', bottom: 4 }}>
         {maxDist.toFixed(1)} km
       </div>
 
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
-        className="absolute inset-x-0"
+        className="absolute inset-x-0 cursor-crosshair"
         style={{ top: 24, height: height - 44, width: '100%' }}
+        onMouseMove={handleMove}
+        onMouseLeave={handleLeave}
       >
         {paths.map((p) => (
           <g key={p.id}>
@@ -159,6 +218,7 @@ export function ElevationProfile({
             <polyline points={p.line} fill="none" stroke={p.color} strokeWidth={1.5} opacity={0.9} />
           </g>
         ))}
+
         {/* Risk zone marks along baseline */}
         {riskMarks.map((m, i) => (
           <line
@@ -172,6 +232,33 @@ export function ElevationProfile({
             opacity={0.35}
           />
         ))}
+
+        {/* Progress cursor (leader) */}
+        {cursorX != null && (
+          <line
+            x1={cursorX}
+            y1={0}
+            x2={cursorX}
+            y2={H}
+            stroke="var(--color-lime)"
+            strokeWidth={1.5}
+            opacity={0.9}
+          />
+        )}
+
+        {/* Hover cursor */}
+        {hoverX != null && (
+          <line
+            x1={hoverX}
+            y1={0}
+            x2={hoverX}
+            y2={H}
+            stroke="var(--color-ink)"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            opacity={0.6}
+          />
+        )}
       </svg>
     </div>
   )

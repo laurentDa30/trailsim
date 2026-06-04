@@ -101,23 +101,33 @@ export function Timeline({
         </span>
       </div>
 
-      {/* Scrubber */}
-      <input
-        type="range"
-        min={0}
-        max={maxIndex}
-        step={1}
-        value={timeIndex}
-        disabled={disabled}
-        onChange={(e) => onScrub(parseInt(e.target.value))}
-        className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
-        style={{
-          accentColor: 'var(--color-lime)',
-          background: `linear-gradient(to right, var(--color-lime) 0%, var(--color-lime) ${
-            maxIndex > 0 ? (timeIndex / maxIndex) * 100 : 0
-          }%, var(--color-bg-2) ${maxIndex > 0 ? (timeIndex / maxIndex) * 100 : 0}%)`,
-        }}
-      />
+      {/* Scrubber with visible progress track */}
+      <div className="relative flex-1 flex items-center" style={{ height: 18 }}>
+        {/* Background track */}
+        <div
+          className="absolute left-0 right-0 h-1.5 rounded-full"
+          style={{ background: 'var(--color-bg-2)' }}
+        />
+        {/* Filled progress */}
+        <div
+          className="absolute left-0 h-1.5 rounded-full"
+          style={{
+            width: `${maxIndex > 0 ? (timeIndex / maxIndex) * 100 : 0}%`,
+            background: 'var(--color-lime)',
+          }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={maxIndex}
+          step={1}
+          value={timeIndex}
+          disabled={disabled}
+          onChange={(e) => onScrub(parseInt(e.target.value))}
+          className="absolute left-0 right-0 w-full appearance-none cursor-pointer bg-transparent"
+          style={{ accentColor: 'var(--color-lime)' }}
+        />
+      </div>
 
       {/* Runners on course */}
       <div className="flex items-center gap-1.5 shrink-0">

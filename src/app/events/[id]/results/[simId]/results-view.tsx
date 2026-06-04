@@ -72,6 +72,56 @@ function formatTimeHHMM(seconds: number): string {
   return `${String(h).padStart(2, '0')}h${String(m).padStart(2, '0')}`
 }
 
+interface ClusteredRisk {
+  raceId: string
+  segmentIndex: number
+  riskScore: number
+  jamProbability: number
+  peakDensity: number
+  dist: number
+}
+
+/**
+ * Merge near-duplicate risk segments. A dense GPX track produces one risk
+ * entry per ~20 m point, so the start line alone can yield dozens of rows.
+ * Group consecutive entries (per race, within `gapKm`) and keep the worst one.
+ */
+function clusterRiskZones(
+  entries: { raceId: string; segmentIndex: number; riskScore: number; jamProbability: number; peakDensity: number }[],
+  races: { id: string; gpxPoints: GPXPoint[] }[],
+  gapKm = 0.4
+): ClusteredRisk[] {
+  const byRace = new Map<string, ClusteredRisk[]>()
+  for (const e of entries) {
+    const race = races.find((r) => r.id === e.raceId)
+    const dist = race?.gpxPoints[e.segmentIndex]?.dist ?? 0
+    if (!byRace.has(e.raceId)) byRace.set(e.raceId, [])
+    byRace.get(e.raceId)!.push({ ...e, dist })
+  }
+
+  const out: ClusteredRisk[] = []
+  for (const list of byRace.values()) {
+    list.sort((a, b) => a.dist - b.dist)
+    let cluster: ClusteredRisk[] = []
+    const flush = () => {
+      if (cluster.length === 0) return
+      const best = cluster.reduce((m, c) => (c.riskScore > m.riskScore ? c : m), cluster[0])
+      out.push({
+        ...best,
+        peakDensity: Math.max(...cluster.map((c) => c.peakDensity)),
+        jamProbability: Math.max(...cluster.map((c) => c.jamProbability)),
+      })
+      cluster = []
+    }
+    for (const e of list) {
+      if (cluster.length > 0 && e.dist - cluster[cluster.length - 1].dist > gapKm) flush()
+      cluster.push(e)
+    }
+    flush()
+  }
+  return out
+}
+
 function Section({
   icon,
   label,
@@ -121,6 +171,30 @@ function Section({
       </button>
       {open && children}
     </div>
+  )
+}
+
+function LayerToggle({
+  label,
+  on,
+  onClick,
+}: {
+  label: string
+  on: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2 text-left transition-colors"
+      style={{ color: on ? 'var(--color-ink-2)' : 'var(--color-ink-4)' }}
+    >
+      <span style={{ color: on ? 'var(--color-lime)' : 'var(--color-ink-4)' }}>
+        {on ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />}
+      </span>
+      <span className="text-[11px]">{label}</span>
+    </button>
   )
 }
 
@@ -188,6 +262,11 @@ export function ResultsView({
   const [timeIndex, setTimeIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [showRunners, setShowRunners] = useState(true)
+  const [showTraces, setShowTraces] = useState(true)
+  const [showZones, setShowZones] = useState(true)
+  const [showLogistics, setShowLogistics] = useState(true)
+  // Hovered point on the elevation profile -> marker following the trace on the map
+  const [hoverPoint, setHoverPoint] = useState<[number, number] | null>(null)
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // --- Interactive logistics placement (persisted to localStorage) ---
@@ -271,8 +350,24 @@ export function ResultsView({
     return n
   }, [runnersData, timeIndex])
 
-  const riskMap = useMemo(() => result?.riskMap ?? [], [result])
+  // Leader distance (km) at the active time → progress cursor on the profile
+  const leaderDist = useMemo(() => {
+    let best = 0
+    for (const r of runnersData) {
+      const race = races.find((rr) => rr.id === r.raceId)
+      if (!race || race.gpxPoints.length === 0) continue
+      const total = race.gpxPoints[race.gpxPoints.length - 1].dist
+      const p = r.positions[timeIndex] ?? 0
+      if (p < 1) best = Math.max(best, p * total)
+    }
+    return best
+  }, [runnersData, timeIndex, races])
+
+  const rawRiskMap = useMemo(() => result?.riskMap ?? [], [result])
   const collisionWindows = useMemo(() => result?.collisionWindows ?? [], [result])
+
+  // Merge near-duplicate risk segments before display / mapping
+  const riskMap = useMemo(() => clusterRiskZones(rawRiskMap, races), [rawRiskMap, races])
 
   // Sort risk entries by score descending
   const sortedRiskMap = useMemo(
@@ -411,12 +506,36 @@ export function ResultsView({
               runnersData={runnersData}
               timeIndex={timeIndex}
               showRunners={showRunners}
+              showTraces={showTraces}
+              showZones={showZones}
+              showLogistics={showLogistics}
+              hoverPoint={hoverPoint}
               placedLogistics={placedLogistics}
               placementType={placementType}
               onPlace={placeLogi}
               onMoveLogi={moveLogi}
               onRemoveLogi={removeLogi}
             />
+
+            {/* Layers control (top-right) */}
+            <div
+              className="absolute top-3 right-3 z-[1000] flex flex-col gap-1 px-2.5 py-2 rounded-lg shadow-lg"
+              style={{
+                background: 'var(--color-bg-1)',
+                border: '1px solid var(--color-line)',
+              }}
+            >
+              <span
+                className="text-[9px] font-semibold uppercase tracking-widest mb-0.5"
+                style={{ color: 'var(--color-ink-4)' }}
+              >
+                Calques
+              </span>
+              <LayerToggle label="Tracés" on={showTraces} onClick={() => setShowTraces((v) => !v)} />
+              <LayerToggle label="Coureurs" on={showRunners} onClick={() => setShowRunners((v) => !v)} />
+              <LayerToggle label="Zones à risque" on={showZones} onClick={() => setShowZones((v) => !v)} />
+              <LayerToggle label="Logistique" on={showLogistics} onClick={() => setShowLogistics((v) => !v)} />
+            </div>
 
             {/* Placement-mode banner */}
             {placementType && (
@@ -447,7 +566,13 @@ export function ResultsView({
               </div>
             )}
           </div>
-          <ElevationProfile races={races} riskMap={riskMap} visibleRaces={visibleRaces} />
+          <ElevationProfile
+            races={races}
+            riskMap={riskMap}
+            visibleRaces={visibleRaces}
+            cursorDist={leaderDist}
+            onHover={setHoverPoint}
+          />
         </div>
 
         {/* Right panel */}

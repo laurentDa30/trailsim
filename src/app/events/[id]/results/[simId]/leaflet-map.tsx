@@ -38,6 +38,10 @@ interface LeafletMapProps {
   runnersData?: RunnerData[]
   timeIndex?: number
   showRunners?: boolean
+  showTraces?: boolean
+  showZones?: boolean
+  showLogistics?: boolean
+  hoverPoint?: [number, number] | null
   placedLogistics?: PlacedLogi[]
   placementType?: string | null
   onPlace?: (lat: number, lng: number) => void
@@ -135,6 +139,10 @@ export default function LeafletMap({
   runnersData = [],
   timeIndex = 0,
   showRunners = true,
+  showTraces = true,
+  showZones = true,
+  showLogistics = true,
+  hoverPoint = null,
   placedLogistics = [],
   placementType = null,
   onPlace,
@@ -175,7 +183,7 @@ export default function LeafletMap({
         <FlyToHighlight target={flyTarget} />
 
         {/* Race polylines */}
-        {races.map((race) => {
+        {showTraces && races.map((race) => {
           if (!visibleRaces.has(race.id)) return null
           if (race.gpxPoints.length < 2) return null
           const positions: [number, number][] = decimateTrack(race.gpxPoints).map((p) => [p.lat, p.lng])
@@ -216,7 +224,7 @@ export default function LeafletMap({
           })}
 
         {/* Risk zone markers */}
-        {riskMap.map((entry, i) => {
+        {showZones && riskMap.map((entry, i) => {
           const race = races.find((r) => r.id === entry.raceId)
           if (!race || !visibleRaces.has(race.id)) return null
           const point = race.gpxPoints[entry.segmentIndex]
@@ -251,8 +259,22 @@ export default function LeafletMap({
         {/* Click-to-place handler */}
         <PlacementHandler placementType={placementType} onPlace={onPlace} />
 
+        {/* Hover marker following the elevation profile */}
+        {hoverPoint && (
+          <CircleMarker
+            center={hoverPoint}
+            radius={6}
+            pathOptions={{
+              color: '#ffffff',
+              fillColor: 'var(--color-lime, #7CB518)',
+              fillOpacity: 1,
+              weight: 2,
+            }}
+          />
+        )}
+
         {/* Placed logistics markers (draggable) */}
-        {placedLogistics.map((logi) => {
+        {showLogistics && placedLogistics.map((logi) => {
           const meta = logiTypeOf(logi.type)
           return (
             <Marker
