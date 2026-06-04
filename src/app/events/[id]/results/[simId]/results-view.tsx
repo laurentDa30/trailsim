@@ -27,6 +27,7 @@ import {
   MapPinIcon,
   Trash2Icon,
   XIcon,
+  LayersIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { RiskBadge } from '@/components/layout/risk-badge'
@@ -174,7 +175,8 @@ function Section({
   )
 }
 
-function LayerToggle({
+/** Pill toggle-switch tile used in the "Couches actives" section. */
+function LayerSwitch({
   label,
   on,
   onClick,
@@ -187,13 +189,38 @@ function LayerToggle({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 text-left transition-colors"
-      style={{ color: on ? 'var(--color-ink-2)' : 'var(--color-ink-4)' }}
+      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left select-none transition-colors"
+      style={{
+        background: 'var(--color-bg-2)',
+        border: '1px solid var(--color-line)',
+        color: on ? 'var(--color-ink)' : 'var(--color-ink-3)',
+      }}
     >
-      <span style={{ color: on ? 'var(--color-lime)' : 'var(--color-ink-4)' }}>
-        {on ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />}
+      {/* Switch pill */}
+      <span
+        className="relative shrink-0 rounded-full transition-colors"
+        style={{
+          width: 28,
+          height: 16,
+          background: on
+            ? 'color-mix(in oklab, var(--color-lime) 35%, transparent)'
+            : 'var(--color-bg)',
+          border: `1px solid ${on ? 'var(--color-lime)' : 'var(--color-line)'}`,
+        }}
+      >
+        <span
+          className="absolute rounded-full transition-transform"
+          style={{
+            top: 1,
+            left: 1,
+            width: 12,
+            height: 12,
+            background: on ? 'var(--color-lime)' : 'var(--color-ink-4)',
+            transform: on ? 'translateX(12px)' : 'translateX(0)',
+          }}
+        />
       </span>
-      <span className="text-[11px]">{label}</span>
+      <span className="text-xs">{label}</span>
     </button>
   )
 }
@@ -261,10 +288,18 @@ export function ResultsView({
   const maxIndex = Math.max(0, timestamps.length - 1)
   const [timeIndex, setTimeIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [showRunners, setShowRunners] = useState(true)
-  const [showTraces, setShowTraces] = useState(true)
-  const [showZones, setShowZones] = useState(true)
-  const [showLogistics, setShowLogistics] = useState(true)
+  // Map layers ("Couches actives")
+  const [layers, setLayers] = useState({
+    runners: true,
+    zones: true,
+    shared: true,
+    density: true,
+    heat: false,
+    logistique: true,
+  })
+  const setLayer = useCallback((name: keyof typeof layers, on: boolean) => {
+    setLayers((s) => ({ ...s, [name]: on }))
+  }, [])
   // Hovered point on the elevation profile -> marker following the trace on the map
   const [hoverPoint, setHoverPoint] = useState<[number, number] | null>(null)
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -501,14 +536,18 @@ export function ResultsView({
             <LeafletMap
               races={races}
               riskMap={riskMap}
+              rawRiskMap={rawRiskMap}
+              collisionWindows={collisionWindows}
               visibleRaces={visibleRaces}
               highlightedSegment={highlightedSegment}
               runnersData={runnersData}
               timeIndex={timeIndex}
-              showRunners={showRunners}
-              showTraces={showTraces}
-              showZones={showZones}
-              showLogistics={showLogistics}
+              showRunners={layers.runners}
+              showZones={layers.zones}
+              showShared={layers.shared}
+              showDensity={layers.density}
+              showHeat={layers.heat}
+              showLogistics={layers.logistique}
               hoverPoint={hoverPoint}
               placedLogistics={placedLogistics}
               placementType={placementType}
@@ -516,26 +555,6 @@ export function ResultsView({
               onMoveLogi={moveLogi}
               onRemoveLogi={removeLogi}
             />
-
-            {/* Layers control (top-right) */}
-            <div
-              className="absolute top-3 right-3 z-[1000] flex flex-col gap-1 px-2.5 py-2 rounded-lg shadow-lg"
-              style={{
-                background: 'var(--color-bg-1)',
-                border: '1px solid var(--color-line)',
-              }}
-            >
-              <span
-                className="text-[9px] font-semibold uppercase tracking-widest mb-0.5"
-                style={{ color: 'var(--color-ink-4)' }}
-              >
-                Calques
-              </span>
-              <LayerToggle label="Tracés" on={showTraces} onClick={() => setShowTraces((v) => !v)} />
-              <LayerToggle label="Coureurs" on={showRunners} onClick={() => setShowRunners((v) => !v)} />
-              <LayerToggle label="Zones à risque" on={showZones} onClick={() => setShowZones((v) => !v)} />
-              <LayerToggle label="Logistique" on={showLogistics} onClick={() => setShowLogistics((v) => !v)} />
-            </div>
 
             {/* Placement-mode banner */}
             {placementType && (
@@ -584,6 +603,45 @@ export function ResultsView({
             borderColor: 'var(--color-line)',
           }}
         >
+          {/* COUCHES ACTIVES section */}
+          <Section icon={<LayersIcon size={12} />} label="Couches actives">
+            <div className="p-3 grid grid-cols-2 gap-1.5">
+              <LayerSwitch label="Coureurs" on={layers.runners} onClick={() => setLayer('runners', !layers.runners)} />
+              <LayerSwitch label="Zones risque" on={layers.zones} onClick={() => setLayer('zones', !layers.zones)} />
+              <LayerSwitch label="Tronçons communs" on={layers.shared} onClick={() => setLayer('shared', !layers.shared)} />
+              <LayerSwitch label="Densité live" on={layers.density} onClick={() => setLayer('density', !layers.density)} />
+              <LayerSwitch label="Heatmap" on={layers.heat} onClick={() => setLayer('heat', !layers.heat)} />
+              <LayerSwitch label="Logistique" on={layers.logistique} onClick={() => setLayer('logistique', !layers.logistique)} />
+            </div>
+          </Section>
+
+          {/* STATISTIQUES section */}
+          <Section icon={<BarChart3Icon size={12} />} label="Statistiques simulation">
+            <div className="p-3 grid grid-cols-2 gap-2">
+              <StatTile
+                icon={<FlagIcon size={12} />}
+                label="Premier arrivé"
+                value={firstFinishSeconds != null ? formatTimeHHMM(firstFinishSeconds) : '—'}
+              />
+              <StatTile
+                icon={<TrendingDownIcon size={12} />}
+                label="DNF estimés"
+                value={String(dnfEstimate)}
+                tone="warning"
+              />
+              <StatTile
+                icon={<UsersIcon size={12} />}
+                label="Pic en piste"
+                value={String(peakOnCourse)}
+              />
+              <StatTile
+                icon={<AlertTriangleIcon size={12} />}
+                label="Zones détectées"
+                value={String(riskMap.length)}
+              />
+            </div>
+          </Section>
+
           {/* COURSES section */}
           <Section icon={<MapIcon size={12} />} label="Courses" count={races.length}>
             <div className="p-3 flex flex-col gap-1">
@@ -600,16 +658,15 @@ export function ResultsView({
                     onClick={() => toggleRace(race.id)}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-left transition-colors"
                     style={{
-                      background: isVisible
-                        ? 'var(--color-bg-2)'
-                        : 'transparent',
+                      background: isVisible ? 'var(--color-bg-2)' : 'transparent',
                       border: '1px solid',
                       borderColor: isVisible ? 'var(--color-line)' : 'transparent',
+                      opacity: isVisible ? 1 : 0.42,
                     }}
                   >
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ background: race.color, opacity: isVisible ? 1 : 0.35 }}
+                      style={{ background: race.color, filter: isVisible ? 'none' : 'grayscale(1)' }}
                     />
                     <span
                       className="flex-1 text-sm font-medium truncate"
@@ -799,7 +856,7 @@ export function ResultsView({
           </Section>
 
           {/* PROFILS section */}
-          <Section icon={<UsersIcon size={12} />} label="Profils" count={runnerProfiles.length}>
+          <Section icon={<UsersIcon size={12} />} label="Profils" count={runnerProfiles.length} defaultOpen={false}>
             <div className="p-3 flex flex-col gap-2">
               {runnerProfiles.length === 0 && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
@@ -845,38 +902,12 @@ export function ResultsView({
             </div>
           </Section>
 
-          {/* STATISTIQUES section */}
-          <Section icon={<BarChart3Icon size={12} />} label="Statistiques simulation">
-            <div className="p-3 grid grid-cols-2 gap-2">
-              <StatTile
-                icon={<FlagIcon size={12} />}
-                label="Premier arrivé"
-                value={firstFinishSeconds != null ? formatTimeHHMM(firstFinishSeconds) : '—'}
-              />
-              <StatTile
-                icon={<TrendingDownIcon size={12} />}
-                label="DNF estimés"
-                value={String(dnfEstimate)}
-                tone="warning"
-              />
-              <StatTile
-                icon={<UsersIcon size={12} />}
-                label="Pic en piste"
-                value={String(peakOnCourse)}
-              />
-              <StatTile
-                icon={<AlertTriangleIcon size={12} />}
-                label="Zones détectées"
-                value={String(riskMap.length)}
-              />
-            </div>
-          </Section>
-
           {/* LOGISTIQUE TERRAIN section */}
           <Section
             icon={<MapPinIcon size={12} />}
             label="Logistique terrain"
             count={placedLogistics.length}
+            defaultOpen={false}
           >
             <div className="p-3 flex flex-col gap-3">
               <p className="text-[10px]" style={{ color: 'var(--color-ink-4)' }}>
@@ -975,15 +1006,6 @@ export function ResultsView({
               <span>Vent {simulation.wind} km/h</span>
               {simulation.rain && <span style={{ color: 'var(--color-warning)' }}>Pluie</span>}
               {simulation.fog && <span style={{ color: 'var(--color-warning)' }}>Brouillard</span>}
-              <button
-                type="button"
-                onClick={() => setShowRunners((v) => !v)}
-                className="ml-auto flex items-center gap-1 transition-colors"
-                style={{ color: showRunners ? 'var(--color-lime)' : 'var(--color-ink-4)' }}
-              >
-                {showRunners ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />}
-                Coureurs
-              </button>
             </div>
           </div>
         </aside>

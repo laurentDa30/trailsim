@@ -12,10 +12,18 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import 'leaflet/dist/leaflet.css'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
 import { logiTypeOf, type PlacedLogi } from './logistics'
+
+interface CollisionWindow {
+  raceIds: string[]
+  segmentIndex: number
+  tStart: number
+  tEnd: number
+  peak: number
+}
 
 interface RunnerData {
   runnerId: string
@@ -35,11 +43,15 @@ interface LeafletMapProps {
   riskMap: RiskMapEntry[]
   visibleRaces: Set<string>
   highlightedSegment: { raceId: string; segmentIndex: number } | null
+  rawRiskMap?: RiskMapEntry[]
+  collisionWindows?: CollisionWindow[]
   runnersData?: RunnerData[]
   timeIndex?: number
   showRunners?: boolean
-  showTraces?: boolean
   showZones?: boolean
+  showShared?: boolean
+  showDensity?: boolean
+  showHeat?: boolean
   showLogistics?: boolean
   hoverPoint?: [number, number] | null
   placedLogistics?: PlacedLogi[]
@@ -136,11 +148,15 @@ export default function LeafletMap({
   riskMap,
   visibleRaces,
   highlightedSegment,
+  rawRiskMap = [],
+  collisionWindows = [],
   runnersData = [],
   timeIndex = 0,
   showRunners = true,
-  showTraces = true,
   showZones = true,
+  showShared = true,
+  showDensity = true,
+  showHeat = false,
   showLogistics = true,
   hoverPoint = null,
   placedLogistics = [],
@@ -155,7 +171,64 @@ export default function LeafletMap({
     ? [firstPoints[0].lat, firstPoints[0].lng]
     : [45.92, 6.87]
 
-  const racesById = new Map(races.map((r) => [r.id, r]))
+  const racesById = useMemo(() => new Map(races.map((r) => [r.id, r])), [races])
+
+  // Live density: bin on-course runners along each track at the current time
+  const densityCircles = useMemo(() => {
+    if (!showDensity) return [] as { lat: number; lng: number; count: number }[]
+    const bins = new Map<string, { latSum: number; lngSum: number; count: number }>()
+    for (const r of runnersData) {
+      if (!visibleRaces.has(r.raceId)) continue
+      const pos = r.positions[timeIndex] ?? 0
+      if (pos <= 0 || pos >= 1) continue
+      const race = racesById.get(r.raceId)
+      if (!race || race.gpxPoints.length < 2) continue
+      const ll = latLngAtPosition(race.gpxPoints, pos)
+      if (!ll) continue
+      const key = `${r.raceId}:${Math.floor(pos * 60)}`
+      const e = bins.get(key) ?? { latSum: 0, lngSum: 0, count: 0 }
+      e.latSum += ll[0]
+      e.lngSum += ll[1]
+      e.count++
+      bins.set(key, e)
+    }
+    const out: { lat: number; lng: number; count: number }[] = []
+    for (const e of bins.values()) {
+      if (e.count < 6) continue // only surface genuine crowding
+      out.push({ lat: e.latSum / e.count, lng: e.lngSum / e.count, count: e.count })
+    }
+    return out
+  }, [showDensity, runnersData, timeIndex, visibleRaces, racesById])
+
+  // Aggregate heatmap: hotspots across the whole simulation (peak density)
+  const heatPoints = useMemo(() => {
+    if (!showHeat || rawRiskMap.length === 0) return [] as { lat: number; lng: number; intensity: number }[]
+    const maxPeak = Math.max(1, ...rawRiskMap.map((e) => e.peakDensity))
+    const pts: { lat: number; lng: number; intensity: number }[] = []
+    for (const e of rawRiskMap) {
+      if (!visibleRaces.has(e.raceId)) continue
+      const intensity = e.peakDensity / maxPeak
+      if (intensity < 0.25) continue
+      const race = racesById.get(e.raceId)
+      const pt = race?.gpxPoints[e.segmentIndex]
+      if (!pt) continue
+      pts.push({ lat: pt.lat, lng: pt.lng, intensity })
+    }
+    return pts
+  }, [showHeat, rawRiskMap, visibleRaces, racesById])
+
+  // Shared segments (tronçons communs): collision points between races
+  const sharedPoints = useMemo(() => {
+    if (!showShared) return [] as { lat: number; lng: number }[]
+    const pts: { lat: number; lng: number }[] = []
+    for (const cw of collisionWindows) {
+      const race = racesById.get(cw.raceIds[0])
+      const pt = race?.gpxPoints[cw.segmentIndex]
+      if (!pt) continue
+      if (cw.raceIds.some((rid) => visibleRaces.has(rid))) pts.push({ lat: pt.lat, lng: pt.lng })
+    }
+    return pts
+  }, [showShared, collisionWindows, visibleRaces, racesById])
 
   // Resolve the highlighted segment to a coordinate for fly-to
   let flyTarget: [number, number] | null = null
@@ -182,8 +255,22 @@ export default function LeafletMap({
 
         <FlyToHighlight target={flyTarget} />
 
+        {/* Aggregate heatmap (bottom layer) */}
+        {heatPoints.map((h, i) => (
+          <CircleMarker
+            key={`heat-${i}`}
+            center={[h.lat, h.lng]}
+            radius={14 + h.intensity * 16}
+            pathOptions={{
+              stroke: false,
+              fillColor: '#DC2626',
+              fillOpacity: 0.08 + h.intensity * 0.18,
+            }}
+          />
+        ))}
+
         {/* Race polylines */}
-        {showTraces && races.map((race) => {
+        {races.map((race) => {
           if (!visibleRaces.has(race.id)) return null
           if (race.gpxPoints.length < 2) return null
           const positions: [number, number][] = decimateTrack(race.gpxPoints).map((p) => [p.lat, p.lng])
@@ -197,6 +284,38 @@ export default function LeafletMap({
             </Polyline>
           )
         })}
+
+        {/* Live density crowding (under the runner dots) */}
+        {densityCircles.map((d, i) => (
+          <CircleMarker
+            key={`dens-${i}`}
+            center={[d.lat, d.lng]}
+            radius={Math.min(28, 8 + d.count * 0.8)}
+            pathOptions={{
+              stroke: false,
+              fillColor: '#D97706',
+              fillOpacity: 0.22,
+            }}
+          />
+        ))}
+
+        {/* Shared segments (tronçons communs) */}
+        {sharedPoints.map((s, i) => (
+          <CircleMarker
+            key={`shared-${i}`}
+            center={[s.lat, s.lng]}
+            radius={9}
+            pathOptions={{
+              color: '#A78BFA',
+              fillColor: '#A78BFA',
+              fillOpacity: 0.25,
+              weight: 2,
+              dashArray: '3 3',
+            }}
+          >
+            <Tooltip>Tronçon commun</Tooltip>
+          </CircleMarker>
+        ))}
 
         {/* Runner dots at current time (started, not finished) */}
         {showRunners &&
