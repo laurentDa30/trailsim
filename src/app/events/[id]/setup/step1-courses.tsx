@@ -39,13 +39,26 @@ interface GpxState {
   error?: string
 }
 
+export interface Resources {
+  effectif: number
+  barrieres: number
+}
+
 interface Step1CoursesProps {
   eventId: string
   races: Race[]
   onUpdate: (races: Race[]) => void
+  resources: Resources
+  onResourcesChange: (r: Resources) => void
 }
 
-export function Step1Courses({ eventId, races, onUpdate }: Step1CoursesProps) {
+export function Step1Courses({
+  eventId,
+  races,
+  onUpdate,
+  resources,
+  onResourcesChange,
+}: Step1CoursesProps) {
   const [localRaces, setLocalRaces] = useState<Race[]>(races)
   // Reflect already-imported GPX tracks (so returning to this step keeps the "imported" state).
   const [gpxStates, setGpxStates] = useState<Record<string, GpxState>>(() => {
@@ -66,8 +79,10 @@ export function Step1Courses({ eventId, races, onUpdate }: Step1CoursesProps) {
     })
     return init
   })
-  const [effectif, setEffectif] = useState(45)
-  const [barrieres, setBarrieres] = useState(20)
+  const effectif = resources.effectif
+  const barrieres = resources.barrieres
+  const setEffectif = (v: number) => onResourcesChange({ ...resources, effectif: v })
+  const setBarrieres = (v: number) => onResourcesChange({ ...resources, barrieres: v })
   const [adding, setAdding] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})

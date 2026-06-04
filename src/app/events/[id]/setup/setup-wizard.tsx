@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ZapIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Step1Courses } from './step1-courses'
+import { Step1Courses, type Resources } from './step1-courses'
 import { Step2Peloton, type PelotonData } from './step2-peloton'
 import { Step3Conditions, type WeatherData } from './step3-conditions'
 import type { Race, Simulation } from '@prisma/client'
@@ -30,6 +30,24 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   const [races, setRaces] = useState(initialRaces)
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState<string | null>(null)
+
+  const [resources, setResources] = useState<Resources>(() => {
+    try {
+      if (simulation?.ressources) {
+        const parsed = JSON.parse(simulation.ressources) as {
+          effectifTotal?: number
+          barrieres?: number
+        }
+        return {
+          effectif: parsed.effectifTotal ?? 45,
+          barrieres: parsed.barrieres ?? 20,
+        }
+      }
+    } catch {
+      /* fall through to defaults */
+    }
+    return { effectif: 45, barrieres: 20 }
+  })
 
   const pelotonRef = useRef<PelotonData | null>(null)
   const weatherRef = useRef<WeatherData>({
@@ -84,6 +102,10 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           rainIntensity: weather.rainIntensity,
           fog: weather.fog,
           runnerProfiles: peloton.profiles,
+          ressources: JSON.stringify({
+            effectifTotal: resources.effectif,
+            barrieres: resources.barrieres,
+          }),
         }),
       })
 
@@ -162,6 +184,8 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               eventId={event.id}
               races={races}
               onUpdate={setRaces}
+              resources={resources}
+              onResourcesChange={setResources}
             />
           )}
           {step === 2 && (
