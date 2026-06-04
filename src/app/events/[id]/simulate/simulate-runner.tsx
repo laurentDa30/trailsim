@@ -268,20 +268,29 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
                   ) : (
                     <div className="flex flex-col items-center gap-0.5">
                       <span
-                        className="font-bold tabular-nums"
+                        className="text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ color: 'var(--color-ink-4)' }}
+                      >
+                        Simulation
+                      </span>
+                      <span
+                        className="font-bold tabular-nums leading-none"
                         style={{
-                          fontSize: 32,
+                          fontSize: 30,
                           fontFamily: "'JetBrains Mono', 'Courier New', monospace",
                           color: 'var(--color-ink)',
                         }}
                       >
-                        {state.progress}%
+                        {state.currentRun}
+                        <span style={{ fontSize: 16, color: 'var(--color-ink-4)' }}>
+                          {' '}/ {state.totalRuns}
+                        </span>
                       </span>
                       <span
-                        className="text-xs tabular-nums"
+                        className="text-[10px] tabular-nums"
                         style={{ color: 'var(--color-ink-4)' }}
                       >
-                        / {state.totalRuns} runs
+                        runs Monte-Carlo
                       </span>
                     </div>
                   )}

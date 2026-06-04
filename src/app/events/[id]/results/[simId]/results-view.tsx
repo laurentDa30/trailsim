@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { ElevationProfile } from './elevation-profile'
+import { Timeline } from './timeline'
 import {
   ArrowLeftIcon,
   FileTextIcon,
@@ -12,6 +14,10 @@ import {
   UsersIcon,
   EyeIcon,
   EyeOffIcon,
+  ChevronDownIcon,
+  BarChart3Icon,
+  FlagIcon,
+  TrendingDownIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { RiskBadge } from '@/components/layout/risk-badge'
@@ -42,7 +48,13 @@ export interface ResultsViewProps {
     elevGain: number
     gpxPoints: GPXPoint[]
   }[]
-  runnerProfiles: { id: string; label: string; color: string; percentage: number }[]
+  runnerProfiles: {
+    id: string
+    label: string
+    color: string
+    percentage: number
+    abandonRate: number
+  }[]
 }
 
 function formatTimeHHMM(seconds: number): string {
@@ -51,21 +63,83 @@ function formatTimeHHMM(seconds: number): string {
   return `${String(h).padStart(2, '0')}h${String(m).padStart(2, '0')}`
 }
 
-function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }) {
+function Section({
+  icon,
+  label,
+  count,
+  defaultOpen = true,
+  children,
+}: {
+  icon: React.ReactNode
+  label: string
+  count?: number
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 px-4 py-2.5 border-b w-full text-left select-none cursor-pointer"
+        style={{ borderColor: 'var(--color-line)', background: 'var(--color-bg)' }}
+      >
+        <span style={{ color: 'var(--color-lime)' }}>{icon}</span>
+        <span
+          className="text-xs font-semibold uppercase tracking-widest"
+          style={{ color: 'var(--color-ink-3)' }}
+        >
+          {label}
+        </span>
+        {count != null && count > 0 && (
+          <span
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+            style={{ background: 'var(--color-bg-2)', color: 'var(--color-ink-4)' }}
+          >
+            {count}
+          </span>
+        )}
+        <span
+          className="ml-auto transition-transform duration-200"
+          style={{
+            color: 'var(--color-ink-4)',
+            transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
+          }}
+        >
+          <ChevronDownIcon size={14} />
+        </span>
+      </button>
+      {open && children}
+    </div>
+  )
+}
+
+function StatTile({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  tone?: 'warning'
+}) {
   return (
     <div
-      className="flex items-center gap-2 px-4 py-2.5 border-b"
-      style={{
-        borderColor: 'var(--color-line)',
-        background: 'var(--color-bg)',
-      }}
+      className="flex flex-col gap-1 px-3 py-2.5 rounded-lg"
+      style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}
     >
-      <span style={{ color: 'var(--color-lime)' }}>{icon}</span>
-      <span
-        className="text-xs font-semibold uppercase tracking-widest"
-        style={{ color: 'var(--color-ink-3)' }}
-      >
+      <span className="flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--color-ink-4)' }}>
+        <span style={{ color: 'var(--color-ink-3)' }}>{icon}</span>
         {label}
+      </span>
+      <span
+        className="font-mono text-lg font-bold tabular-nums leading-none"
+        style={{ color: tone === 'warning' ? 'var(--color-warning)' : 'var(--color-ink)' }}
+      >
+        {value}
       </span>
     </div>
   )
@@ -98,11 +172,107 @@ export function ResultsView({
     })
   }, [])
 
-  const riskMap = result?.riskMap ?? []
-  const collisionWindows = result?.collisionWindows ?? []
+  // --- Timeline / playback state ---
+  const timestamps = useMemo(() => result?.globalTimestamps ?? [], [result])
+  const runnersData = useMemo(() => result?.runnersData ?? [], [result])
+  const maxIndex = Math.max(0, timestamps.length - 1)
+  const [timeIndex, setTimeIndex] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [showRunners, setShowRunners] = useState(true)
+  const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!playing) {
+      if (playRef.current) clearInterval(playRef.current)
+      playRef.current = null
+      return
+    }
+    playRef.current = setInterval(() => {
+      setTimeIndex((i) => {
+        if (i >= maxIndex) {
+          setPlaying(false)
+          return maxIndex
+        }
+        return i + 1
+      })
+    }, 120)
+    return () => {
+      if (playRef.current) clearInterval(playRef.current)
+      playRef.current = null
+    }
+  }, [playing, maxIndex])
+
+  // Runners currently on course (started, not finished) at the active time
+  const runnersOnCourse = useMemo(() => {
+    let n = 0
+    for (const r of runnersData) {
+      const p = r.positions[timeIndex] ?? 0
+      if (p > 0 && p < 1) n++
+    }
+    return n
+  }, [runnersData, timeIndex])
+
+  const riskMap = useMemo(() => result?.riskMap ?? [], [result])
+  const collisionWindows = useMemo(() => result?.collisionWindows ?? [], [result])
 
   // Sort risk entries by score descending
-  const sortedRiskMap = [...riskMap].sort((a, b) => b.riskScore - a.riskScore)
+  const sortedRiskMap = useMemo(
+    () => [...riskMap].sort((a, b) => b.riskScore - a.riskScore),
+    [riskMap]
+  )
+
+  // Set of "raceId:segmentIndex" that have a collision window (for the zone badge)
+  const collisionSegments = useMemo(() => {
+    const set = new Set<string>()
+    for (const cw of collisionWindows) {
+      for (const rid of cw.raceIds) set.add(`${rid}:${cw.segmentIndex}`)
+    }
+    return set
+  }, [collisionWindows])
+
+  // First finisher: earliest timestamp where any runner reaches the finish
+  const firstFinishSeconds = useMemo(() => {
+    let best = Infinity
+    for (const r of runnersData) {
+      for (let t = 0; t < r.positions.length; t++) {
+        if (r.positions[t] >= 1) {
+          if (timestamps[t] < best) best = timestamps[t]
+          break
+        }
+      }
+    }
+    return isFinite(best) ? best : null
+  }, [runnersData, timestamps])
+
+  // DNF estimate: Σ runners(profile) × abandonRate, averaged over profiles
+  const dnfEstimate = useMemo(() => {
+    return Math.round(
+      runnerProfiles.reduce(
+        (sum, p) => sum + simulation.totalRunners * (p.percentage / 100) * p.abandonRate,
+        0
+      )
+    )
+  }, [runnerProfiles, simulation.totalRunners])
+
+  // Peak runners on course across the whole timeline
+  const peakOnCourse = useMemo(() => {
+    if (timestamps.length === 0) return 0
+    let peak = 0
+    for (let t = 0; t < timestamps.length; t++) {
+      let n = 0
+      for (const r of runnersData) {
+        const p = r.positions[t] ?? 0
+        if (p > 0 && p < 1) n++
+      }
+      if (n > peak) peak = n
+    }
+    return peak
+  }, [runnersData, timestamps])
+
+  const maxPeakDensity = useMemo(
+    () => Math.max(1, ...riskMap.map((e) => e.peakDensity)),
+    [riskMap]
+  )
 
   return (
     <div
@@ -171,14 +341,20 @@ export function ResultsView({
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
-        {/* Map area */}
-        <div className="flex-1 relative">
-          <LeafletMap
-            races={races}
-            riskMap={riskMap}
-            visibleRaces={visibleRaces}
-            highlightedSegment={highlightedSegment}
-          />
+        {/* Left column: map + elevation profile */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 relative min-h-0">
+            <LeafletMap
+              races={races}
+              riskMap={riskMap}
+              visibleRaces={visibleRaces}
+              highlightedSegment={highlightedSegment}
+              runnersData={runnersData}
+              timeIndex={timeIndex}
+              showRunners={showRunners}
+            />
+          </div>
+          <ElevationProfile races={races} riskMap={riskMap} visibleRaces={visibleRaces} />
         </div>
 
         {/* Right panel */}
@@ -191,8 +367,7 @@ export function ResultsView({
           }}
         >
           {/* COURSES section */}
-          <div>
-            <SectionHeader icon={<MapIcon size={12} />} label="Courses" />
+          <Section icon={<MapIcon size={12} />} label="Courses" count={races.length}>
             <div className="p-3 flex flex-col gap-1">
               {races.length === 0 && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
@@ -242,11 +417,14 @@ export function ResultsView({
                 )
               })}
             </div>
-          </div>
+          </Section>
 
           {/* ZONES À RISQUE section */}
-          <div>
-            <SectionHeader icon={<AlertTriangleIcon size={12} />} label="Zones à risque" />
+          <Section
+            icon={<AlertTriangleIcon size={12} />}
+            label="Zones à risque"
+            count={sortedRiskMap.length}
+          >
             <div className="p-3 flex flex-col gap-1">
               {sortedRiskMap.length === 0 && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
@@ -260,52 +438,95 @@ export function ResultsView({
                 const isHL =
                   highlightedSegment?.raceId === entry.raceId &&
                   highlightedSegment?.segmentIndex === entry.segmentIndex
+                const zoneColor =
+                  entry.riskScore >= 0.8
+                    ? 'var(--color-danger)'
+                    : entry.riskScore >= 0.5
+                      ? 'var(--color-warning)'
+                      : 'var(--color-safe)'
+                const densityPct = Math.min(100, (entry.peakDensity / maxPeakDensity) * 100)
+                const hasCollision = collisionSegments.has(`${entry.raceId}:${entry.segmentIndex}`)
 
                 return (
-                  <button
+                  <div
                     key={i}
-                    onClick={() =>
-                      setHighlightedSegment(
-                        isHL ? null : { raceId: entry.raceId, segmentIndex: entry.segmentIndex }
-                      )
-                    }
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg w-full text-left transition-colors"
+                    className="flex flex-col gap-1.5 px-3 py-2 rounded-lg transition-colors"
                     style={{
                       background: isHL ? 'var(--color-bg-2)' : 'transparent',
                       border: '1px solid',
                       borderColor: isHL ? 'var(--color-line)' : 'transparent',
                     }}
                   >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{
-                        background:
-                          entry.riskScore >= 0.8
-                            ? 'var(--color-danger)'
-                            : entry.riskScore >= 0.5
-                              ? 'var(--color-warning)'
-                              : 'var(--color-safe)',
-                      }}
-                    />
-                    <span className="flex-1 text-xs" style={{ color: 'var(--color-ink-3)' }}>
-                      {race?.name ?? entry.raceId}
-                      <span
-                        className="ml-1.5 font-mono"
-                        style={{ color: 'var(--color-ink-4)' }}
-                      >
-                        km {dist.toFixed(1)}
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: zoneColor }} />
+                      <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-ink-3)' }}>
+                        {race?.name ?? entry.raceId}
+                        <span className="ml-1.5 font-mono" style={{ color: 'var(--color-ink-4)' }}>
+                          km {dist.toFixed(1)}
+                        </span>
                       </span>
-                    </span>
-                    <RiskBadge score={Math.round(entry.riskScore * 100)} />
-                  </button>
+                      {hasCollision && (
+                        <span
+                          className="flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded"
+                          style={{
+                            background: 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
+                            color: 'var(--color-danger)',
+                          }}
+                          title="Fenêtre de collision sur cette zone"
+                        >
+                          <ZapIcon size={9} />
+                          Collision
+                        </span>
+                      )}
+                      <RiskBadge score={Math.round(entry.riskScore * 100)} />
+                    </div>
+
+                    {/* Density bar: peak runners vs busiest zone */}
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="flex-1 h-1.5 rounded-full overflow-hidden"
+                        style={{ background: 'var(--color-bg)' }}
+                      >
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${densityPct}%`, background: zoneColor, opacity: 0.85 }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--color-ink-4)' }}>
+                        {entry.peakDensity.toFixed(0)} crs
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
+                        Bouchon {Math.round(entry.jamProbability * 100)}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHighlightedSegment(
+                            isHL ? null : { raceId: entry.raceId, segmentIndex: entry.segmentIndex }
+                          )
+                        }
+                        className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors"
+                        style={{ color: 'var(--color-lime)' }}
+                      >
+                        <MapIcon size={10} />
+                        Voir
+                      </button>
+                    </div>
+                  </div>
                 )
               })}
             </div>
-          </div>
+          </Section>
 
           {/* COLLISIONS section */}
-          <div>
-            <SectionHeader icon={<ZapIcon size={12} />} label="Collisions" />
+          <Section
+            icon={<ZapIcon size={12} />}
+            label="Collisions"
+            count={collisionWindows.length}
+          >
             <div className="p-3 flex flex-col gap-1">
               {collisionWindows.length === 0 && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
@@ -357,11 +578,10 @@ export function ResultsView({
                 )
               })}
             </div>
-          </div>
+          </Section>
 
           {/* PROFILS section */}
-          <div>
-            <SectionHeader icon={<UsersIcon size={12} />} label="Profils" />
+          <Section icon={<UsersIcon size={12} />} label="Profils" count={runnerProfiles.length}>
             <div className="p-3 flex flex-col gap-2">
               {runnerProfiles.length === 0 && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
@@ -405,7 +625,34 @@ export function ResultsView({
                 </div>
               ))}
             </div>
-          </div>
+          </Section>
+
+          {/* STATISTIQUES section */}
+          <Section icon={<BarChart3Icon size={12} />} label="Statistiques simulation">
+            <div className="p-3 grid grid-cols-2 gap-2">
+              <StatTile
+                icon={<FlagIcon size={12} />}
+                label="Premier arrivé"
+                value={firstFinishSeconds != null ? formatTimeHHMM(firstFinishSeconds) : '—'}
+              />
+              <StatTile
+                icon={<TrendingDownIcon size={12} />}
+                label="DNF estimés"
+                value={String(dnfEstimate)}
+                tone="warning"
+              />
+              <StatTile
+                icon={<UsersIcon size={12} />}
+                label="Pic en piste"
+                value={String(peakOnCourse)}
+              />
+              <StatTile
+                icon={<AlertTriangleIcon size={12} />}
+                label="Zones détectées"
+                value={String(riskMap.length)}
+              />
+            </div>
+          </Section>
 
           {/* Bottom spacer */}
           <div className="flex-1" />
@@ -415,16 +662,47 @@ export function ResultsView({
             className="px-4 py-3 border-t text-xs"
             style={{ borderColor: 'var(--color-line)', color: 'var(--color-ink-4)' }}
           >
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>{simulation.totalRunners} coureurs</span>
               <span>{simulation.temperature}°C</span>
               <span>Vent {simulation.wind} km/h</span>
               {simulation.rain && <span style={{ color: 'var(--color-warning)' }}>Pluie</span>}
               {simulation.fog && <span style={{ color: 'var(--color-warning)' }}>Brouillard</span>}
+              <button
+                type="button"
+                onClick={() => setShowRunners((v) => !v)}
+                className="ml-auto flex items-center gap-1 transition-colors"
+                style={{ color: showRunners ? 'var(--color-lime)' : 'var(--color-ink-4)' }}
+              >
+                {showRunners ? <EyeIcon size={12} /> : <EyeOffIcon size={12} />}
+                Coureurs
+              </button>
             </div>
           </div>
         </aside>
       </div>
+
+      {/* Timeline transport */}
+      <Timeline
+        timestamps={timestamps}
+        timeIndex={timeIndex}
+        playing={playing}
+        runnersOnCourse={runnersOnCourse}
+        totalRunners={simulation.totalRunners}
+        onScrub={(i) => {
+          setPlaying(false)
+          setTimeIndex(i)
+        }}
+        onTogglePlay={() => setPlaying((p) => !p)}
+        onStepStart={() => {
+          setPlaying(false)
+          setTimeIndex(0)
+        }}
+        onStepEnd={() => {
+          setPlaying(false)
+          setTimeIndex(maxIndex)
+        }}
+      />
     </div>
   )
 }

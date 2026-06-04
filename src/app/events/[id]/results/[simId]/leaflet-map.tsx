@@ -1,8 +1,17 @@
 'use client'
 
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip } from 'react-leaflet'
+import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet'
+import { useEffect } from 'react'
 import 'leaflet/dist/leaflet.css'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
+
+interface RunnerData {
+  runnerId: string
+  raceId: string
+  profileLabel: string
+  color: string
+  positions: number[]
+}
 
 interface LeafletMapProps {
   races: {
@@ -14,6 +23,37 @@ interface LeafletMapProps {
   riskMap: RiskMapEntry[]
   visibleRaces: Set<string>
   highlightedSegment: { raceId: string; segmentIndex: number } | null
+  runnersData?: RunnerData[]
+  timeIndex?: number
+  showRunners?: boolean
+}
+
+/** Flies the map to the highlighted segment whenever it changes. */
+function FlyToHighlight({
+  target,
+}: {
+  target: [number, number] | null
+}) {
+  const map = useMap()
+  useEffect(() => {
+    if (target) map.flyTo(target, Math.max(map.getZoom(), 14), { duration: 0.6 })
+  }, [target, map])
+  return null
+}
+
+/** Interpolate a [lat,lng] along a track from a 0–1 position fraction. */
+function latLngAtPosition(points: GPXPoint[], position: number): [number, number] | null {
+  const n = points.length
+  if (n === 0) return null
+  if (n === 1) return [points[0].lat, points[0].lng]
+  const clamped = Math.max(0, Math.min(1, position))
+  const f = clamped * (n - 1)
+  const i0 = Math.floor(f)
+  const i1 = Math.min(n - 1, i0 + 1)
+  const t = f - i0
+  const a = points[i0]
+  const b = points[i1]
+  return [a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t]
 }
 
 function getRiskColor(score: number): string {
@@ -22,12 +62,44 @@ function getRiskColor(score: number): string {
   return 'var(--color-safe, #16A34A)'
 }
 
-export default function LeafletMap({ races, riskMap, visibleRaces, highlightedSegment }: LeafletMapProps) {
+/**
+ * Decimate a track to at most `maxPts` points for lightweight Leaflet polylines.
+ * Keeps the first and last point. The elevation profile keeps the full track.
+ */
+function decimateTrack(track: GPXPoint[], maxPts = 400): GPXPoint[] {
+  if (track.length <= maxPts) return track
+  const step = Math.ceil(track.length / maxPts)
+  const result: GPXPoint[] = []
+  for (let i = 0; i < track.length; i += step) result.push(track[i])
+  const last = track[track.length - 1]
+  if (result[result.length - 1] !== last) result.push(last)
+  return result
+}
+
+export default function LeafletMap({
+  races,
+  riskMap,
+  visibleRaces,
+  highlightedSegment,
+  runnersData = [],
+  timeIndex = 0,
+  showRunners = true,
+}: LeafletMapProps) {
   // Compute center from first race with points
   const firstPoints = races.find((r) => r.gpxPoints.length > 0)?.gpxPoints
   const center: [number, number] = firstPoints
     ? [firstPoints[0].lat, firstPoints[0].lng]
     : [45.92, 6.87]
+
+  const racesById = new Map(races.map((r) => [r.id, r]))
+
+  // Resolve the highlighted segment to a coordinate for fly-to
+  let flyTarget: [number, number] | null = null
+  if (highlightedSegment) {
+    const hlRace = racesById.get(highlightedSegment.raceId)
+    const hlPt = hlRace?.gpxPoints[highlightedSegment.segmentIndex]
+    if (hlPt) flyTarget = [hlPt.lat, hlPt.lng]
+  }
 
   return (
     <>
@@ -37,17 +109,20 @@ export default function LeafletMap({ races, riskMap, visibleRaces, highlightedSe
         zoom={12}
         style={{ width: '100%', height: '100%', background: '#14110f' }}
         zoomControl={true}
+        preferCanvas={true}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="© OpenStreetMap"
         />
 
+        <FlyToHighlight target={flyTarget} />
+
         {/* Race polylines */}
         {races.map((race) => {
           if (!visibleRaces.has(race.id)) return null
           if (race.gpxPoints.length < 2) return null
-          const positions: [number, number][] = race.gpxPoints.map((p) => [p.lat, p.lng])
+          const positions: [number, number][] = decimateTrack(race.gpxPoints).map((p) => [p.lat, p.lng])
           return (
             <Polyline
               key={race.id}
@@ -58,6 +133,31 @@ export default function LeafletMap({ races, riskMap, visibleRaces, highlightedSe
             </Polyline>
           )
         })}
+
+        {/* Runner dots at current time (started, not finished) */}
+        {showRunners &&
+          runnersData.map((runner) => {
+            if (!visibleRaces.has(runner.raceId)) return null
+            const pos = runner.positions[timeIndex] ?? 0
+            if (pos <= 0 || pos >= 1) return null // not started or finished
+            const race = racesById.get(runner.raceId)
+            if (!race || race.gpxPoints.length < 2) return null
+            const latlng = latLngAtPosition(race.gpxPoints, pos)
+            if (!latlng) return null
+            return (
+              <CircleMarker
+                key={runner.runnerId}
+                center={latlng}
+                radius={2.5}
+                pathOptions={{
+                  color: runner.color,
+                  fillColor: runner.color,
+                  fillOpacity: 0.85,
+                  weight: 0,
+                }}
+              />
+            )
+          })}
 
         {/* Risk zone markers */}
         {riskMap.map((entry, i) => {

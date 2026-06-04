@@ -81,6 +81,7 @@ export default async function ResultsPage({ params }: PageProps) {
         label: p.label,
         color: p.color,
         percentage: p.percentage,
+        abandonRate: p.abandonRate,
       }))}
     />
   )
