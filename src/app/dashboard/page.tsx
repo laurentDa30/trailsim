@@ -1,0 +1,215 @@
+import { redirect } from "next/navigation"
+import Link from "next/link"
+import { auth } from "@/lib/auth"
+import db from "@/lib/db"
+import { Topbar } from "@/components/layout/topbar"
+import { StatCard } from "@/components/layout/stat-card"
+import { EventCard } from "@/components/dashboard/event-card"
+import { Plus, LayoutDashboard } from "lucide-react"
+
+export default async function DashboardPage() {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    redirect("/login")
+  }
+
+  const events = await db.event.findMany({
+    where: { userId: session.user.id },
+    include: {
+      races: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+        },
+      },
+      simulations: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          status: true,
+          totalRunners: true,
+          resultSnapshot: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  // Compute stats
+  const totalRaces = events.reduce((sum, e) => sum + e.races.length, 0)
+  const totalSimulations = events.reduce((sum, e) => sum + e.simulations.length, 0)
+
+  // Get simulation total runners from latest simulations
+  const totalSimulatedRunners = events.reduce((sum, e) => {
+    const latest = e.simulations[0]
+    return sum + (latest?.totalRunners ?? 0)
+  }, 0)
+
+  return (
+    <div className="flex flex-col min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
+      <Topbar activePage="dashboard" />
+
+      <main className="flex-1 px-6 py-8 max-w-7xl mx-auto w-full">
+        {/* Page header */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex items-center justify-center w-9 h-9 rounded-xl"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--color-lime) 10%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--color-lime) 20%, transparent)",
+              }}
+            >
+              <LayoutDashboard size={16} style={{ color: "var(--color-lime)" }} />
+            </div>
+            <div>
+              <h1
+                className="text-lg font-semibold leading-tight"
+                style={{ color: "var(--color-ink)" }}
+              >
+                Dashboard
+              </h1>
+              {session.user.name && (
+                <p className="text-xs" style={{ color: "var(--color-ink-4)" }}>
+                  Bonjour, {session.user.name}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <Link
+            href="/events/new"
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 hover:opacity-90"
+            style={{
+              backgroundColor: "var(--color-lime)",
+              color: "#0d1a00",
+            }}
+          >
+            <Plus size={15} />
+            Nouvel événement
+          </Link>
+        </div>
+
+        {/* Stats strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+          <StatCard
+            value={events.length}
+            label="Événements"
+            highlight={events.length > 0}
+          />
+          <StatCard
+            value={totalRaces}
+            label="Courses au total"
+          />
+          <StatCard
+            value={totalSimulatedRunners.toLocaleString("fr-FR")}
+            label="Coureurs simulés"
+          />
+          <StatCard
+            value={totalSimulations}
+            label="Simulations"
+          />
+        </div>
+
+        {/* Events grid */}
+        {events.length === 0 ? (
+          <div
+            className="flex flex-col items-center justify-center py-24 px-6 rounded-2xl border"
+            style={{
+              backgroundColor: "var(--color-bg-1)",
+              borderColor: "var(--color-line)",
+            }}
+          >
+            <div
+              className="flex items-center justify-center w-14 h-14 rounded-2xl mb-5"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--color-lime) 8%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--color-lime) 15%, transparent)",
+              }}
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 22 22"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <polyline
+                  points="2,16 6,10 9,13 13,5 17,9 20,7"
+                  stroke="var(--color-lime)"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+                <line
+                  x1="2"
+                  y1="16"
+                  x2="20"
+                  y2="16"
+                  stroke="var(--color-forest)"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            <h2
+              className="text-base font-semibold mb-2"
+              style={{ color: "var(--color-ink)" }}
+            >
+              Aucun événement pour l&apos;instant
+            </h2>
+            <p
+              className="text-sm text-center max-w-sm mb-6"
+              style={{ color: "var(--color-ink-3)" }}
+            >
+              Créez votre premier événement pour commencer à simuler votre peloton et planifier votre logistique terrain.
+            </p>
+            <Link
+              href="/events/new"
+              className="inline-flex items-center gap-2 h-9 px-5 rounded-lg text-sm font-medium transition-all duration-150 hover:opacity-90"
+              style={{
+                backgroundColor: "var(--color-lime)",
+                color: "#0d1a00",
+              }}
+            >
+              <Plus size={14} />
+              Créer mon premier événement
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {events.map((event) => (
+              <EventCard
+                key={event.id}
+                id={event.id}
+                name={event.name}
+                date={event.date}
+                location={event.location}
+                races={event.races}
+                totalRunners={event.simulations[0]?.totalRunners ?? 0}
+                latestSimulation={
+                  event.simulations[0]
+                    ? {
+                        id: event.simulations[0].id,
+                        status: event.simulations[0].status as
+                          | "PENDING"
+                          | "RUNNING"
+                          | "DONE"
+                          | "ERROR",
+                        totalRunners: event.simulations[0].totalRunners,
+                        resultSnapshot: event.simulations[0].resultSnapshot,
+                      }
+                    : null
+                }
+              />
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}

@@ -1,0 +1,81 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #14110f;
+  --color-bg-1: #1a1714;
+  --color-bg-2: #222019;
+  --color-line: #2a2824;
+  --color-ink: #f5f4f0;
+  --color-ink-2: #c8c4bc;
+  --color-ink-3: #8a8680;
+  --color-ink-4: #555250;
+  --color-lime: #7CB518;
+  --color-forest: #2D5016;
+  --color-danger: #DC2626;
+  --color-warning: #D97706;
+  --color-safe: #16A34A;
+
+  --font-ui: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* Default dark mode via data-theme attribute */
+[data-theme="dark"],
+:root {
+  color-scheme: dark;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+}
+
+/* Base styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100%;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  line-height: 1.5;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-4);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) var(--color-bg-1);
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-lime);
+  color: var(--color-bg);
+}

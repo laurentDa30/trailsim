@@ -1,0 +1,105 @@
+export interface GPXPoint {
+  lat: number
+  lng: number
+  alt: number     // metres
+  dist: number    // km from start
+  slope: number   // % (positive = uphill)
+  aspect: number  // azimuth degrees (0=N, 90=E)
+}
+
+export interface RunnerProfile {
+  id: string
+  label: string
+  percentage: number
+  baseSpeedMin: number
+  baseSpeedMax: number
+  climbCoeff: number
+  descentCoeff: number
+  fatigueFactor: number
+  techSkill: number
+  ravitoDuration: number
+  abandonRate: number
+  color: string
+}
+
+export interface Runner {
+  id: string
+  raceId: string
+  profileLabel: string
+  baseSpeed: number
+  climbCoeff: number
+  descentCoeff: number
+  fatigueFactor: number
+  techSkill: number
+  ravitoDuration: number
+  color: string
+}
+
+export interface RunnerState {
+  position: number      // 0-1 along track
+  distanceDone: number  // km
+  elevGainDone: number  // m
+  timeElapsed: number   // seconds since own start
+  energy: number        // 0-1
+  finished: boolean
+  atRavito: number      // seconds remaining at ravito stop
+}
+
+export interface RaceConfig {
+  id: string
+  name: string
+  color: string
+  startOffset: number   // seconds from T0
+  totalRunners: number
+  gpxPoints: GPXPoint[]
+  profiles: RunnerProfile[]
+}
+
+export interface SimConfig {
+  simulationId: string
+  races: RaceConfig[]
+  weather: {
+    temperature: number
+    wind: number
+    windDirection: number
+    rain: boolean
+    rainIntensity: number
+    fog: boolean
+  }
+  stepSeconds: number
+  nRuns: number
+}
+
+export interface RiskMapEntry {
+  raceId: string
+  segmentIndex: number
+  riskScore: number
+  jamProbability: number
+  peakDensity: number
+}
+
+export interface CompressedSimulationResult {
+  simId: string
+  globalTimestamps: number[]
+  runnersData: Array<{
+    runnerId: string
+    raceId: string
+    profileLabel: string
+    color: string
+    positions: number[]    // 0-1 progression at each timestamp
+  }>
+  riskMap: RiskMapEntry[]
+  collisionWindows: Array<{
+    raceIds: string[]
+    segmentIndex: number
+    tStart: number
+    tEnd: number
+    peak: number
+  }>
+}
+
+export type WorkerMessage =
+  | { type: 'START'; config: SimConfig }
+  | { type: 'PROGRESS'; run: number; total: number }
+  | { type: 'DONE'; result: CompressedSimulationResult }
+  | { type: 'ERROR'; message: string }

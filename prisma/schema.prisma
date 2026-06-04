@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  events       Event[]
+  accounts     Account[]
+  sessions     Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+model Event {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  date        DateTime?
+  location    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  races       Race[]
+  simulations Simulation[]
+}
+
+model Race {
+  id         String    @id @default(cuid())
+  name       String
+  distance   Float     @default(0)
+  elevGain   Int       @default(0)
+  elevLoss   Int       @default(0)
+  startTime  Int       @default(0)
+  gpxRaw     String?
+  gpxPoints  String    @default("[]")
+  color      String    @default("#7CB518")
+  eventId    String
+  event      Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  segments   Segment[]
+}
+
+model Segment {
+  id         String  @id @default(cuid())
+  raceId     String
+  race       Race    @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  indexStart Int     @default(0)
+  indexEnd   Int     @default(0)
+  type       String  @default("NARROW")
+  label      String?
+  width      Float   @default(1.0)
+  techLevel  Int     @default(1)
+  note       String?
+  lat        Float   @default(0)
+  lng        Float   @default(0)
+}
+
+model Simulation {
+  id             String          @id @default(cuid())
+  name           String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  eventId        String
+  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  totalRunners   Int             @default(300)
+  status         String          @default("PENDING")
+  temperature    Float           @default(18.0)
+  wind           Float           @default(0.0)
+  windDirection  Float           @default(0.0)
+  rain           Boolean         @default(false)
+  rainIntensity  Float           @default(0.0)
+  fog            Boolean         @default(false)
+  resultSnapshot String?
+  riskMap        String?
+  logistique     String          @default("[]")
+  ressources     String          @default("{\"effectifTotal\":45,\"barrieres\":20}")
+  runnerProfiles RunnerProfile[]
+}
+
+model RunnerProfile {
+  id             String     @id @default(cuid())
+  label          String
+  percentage     Float
+  baseSpeedMin   Float      @default(7)
+  baseSpeedMax   Float      @default(10)
+  climbCoeff     Float      @default(1.0)
+  descentCoeff   Float      @default(1.0)
+  fatigueFactor  Float      @default(0.8)
+  techSkill      Float      @default(0.7)
+  ravitoDuration Int        @default(90)
+  abandonRate    Float      @default(0.1)
+  color          String     @default("#888780")
+  simulationId   String
+  simulation     Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+}
