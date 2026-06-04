@@ -12,10 +12,89 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import 'leaflet/dist/leaflet.css'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
 import { logiTypeOf, type PlacedLogi } from './logistics'
+
+interface DrawItem {
+  lat: number
+  lng: number
+  r: number
+  fill: string
+  alpha: number
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+/**
+ * Single canvas layer that draws runners / density / heat / shared dots.
+ * Rendering hundreds of these as react-leaflet markers caused the map to
+ * stutter and glitch on every pan, zoom and timeline tick — one canvas that
+ * redraws on map events is far cheaper and stable.
+ */
+function CanvasOverlay({ items }: { items: DrawItem[] }) {
+  const map = useMap()
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const itemsRef = useRef<DrawItem[]>(items)
+  const drawRef = useRef<() => void>(() => {})
+
+  useEffect(() => {
+    const canvas = L.DomUtil.create('canvas', 'ts-runner-canvas') as HTMLCanvasElement
+    canvas.style.position = 'absolute'
+    canvas.style.pointerEvents = 'none'
+    map.getPanes().overlayPane.appendChild(canvas)
+    canvasRef.current = canvas
+
+    const draw = () => {
+      const size = map.getSize()
+      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+      const topLeft = map.containerPointToLayerPoint([0, 0])
+      L.DomUtil.setPosition(canvas, topLeft)
+      canvas.width = size.x * dpr
+      canvas.height = size.y * dpr
+      canvas.style.width = `${size.x}px`
+      canvas.style.height = `${size.y}px`
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, size.x, size.y)
+      for (const it of itemsRef.current) {
+        const p = map.latLngToContainerPoint([it.lat, it.lng])
+        ctx.globalAlpha = it.alpha
+        ctx.fillStyle = it.fill
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, it.r, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.globalAlpha = 1
+    }
+
+    drawRef.current = draw
+    map.on('move zoom viewreset resize', draw)
+    draw()
+    return () => {
+      map.off('move zoom viewreset resize', draw)
+      canvas.remove()
+    }
+  }, [map])
+
+  // Redraw when the item set changes (timeline tick, layer toggles, …)
+  useEffect(() => {
+    itemsRef.current = items
+    drawRef.current()
+  }, [items])
+
+  return null
+}
 
 interface CollisionWindow {
   raceIds: string[]
@@ -149,7 +228,6 @@ export default function LeafletMap({
   visibleRaces,
   highlightedSegment,
   rawRiskMap = [],
-  collisionWindows = [],
   runnersData = [],
   timeIndex = 0,
   showRunners = true,
@@ -217,18 +295,69 @@ export default function LeafletMap({
     return pts
   }, [showHeat, rawRiskMap, visibleRaces, racesById])
 
-  // Shared segments (tronçons communs): collision points between races
+  // Shared segments (tronçons communs): where two course traces physically
+  // overlap (within ~35 m), excluding the start area (each race starts apart
+  // in time, so the common start line is not a meaningful merge point).
   const sharedPoints = useMemo(() => {
     if (!showShared) return [] as { lat: number; lng: number }[]
+    const visible = races.filter((r) => visibleRaces.has(r.id) && r.gpxPoints.length > 1)
     const pts: { lat: number; lng: number }[] = []
-    for (const cw of collisionWindows) {
-      const race = racesById.get(cw.raceIds[0])
-      const pt = race?.gpxPoints[cw.segmentIndex]
-      if (!pt) continue
-      if (cw.raceIds.some((rid) => visibleRaces.has(rid))) pts.push({ lat: pt.lat, lng: pt.lng })
+    const THRESH_KM = 0.035
+    const START_EXCL_KM = 0.5
+    const stepOf = (pp: GPXPoint[]) => Math.max(1, Math.floor(pp.length / 250))
+    for (let i = 0; i < visible.length; i++) {
+      for (let j = i + 1; j < visible.length; j++) {
+        const A = visible[i].gpxPoints
+        const B = visible[j].gpxPoints
+        const sa = stepOf(A)
+        const sb = stepOf(B)
+        for (let a = 0; a < A.length; a += sa) {
+          const pa = A[a]
+          if (pa.dist < START_EXCL_KM) continue
+          for (let b = 0; b < B.length; b += sb) {
+            const pb = B[b]
+            if (pb.dist < START_EXCL_KM) continue
+            if (haversineKm(pa.lat, pa.lng, pb.lat, pb.lng) < THRESH_KM) {
+              pts.push({ lat: pa.lat, lng: pa.lng })
+              break
+            }
+          }
+        }
+      }
     }
     return pts
-  }, [showShared, collisionWindows, visibleRaces, racesById])
+  }, [showShared, races, visibleRaces])
+
+  // Runner positions at the active time (started, not finished)
+  const runnerDots = useMemo(() => {
+    if (!showRunners) return [] as { lat: number; lng: number; color: string }[]
+    const out: { lat: number; lng: number; color: string }[] = []
+    for (const r of runnersData) {
+      if (!visibleRaces.has(r.raceId)) continue
+      const pos = r.positions[timeIndex] ?? 0
+      if (pos <= 0 || pos >= 1) continue
+      const race = racesById.get(r.raceId)
+      if (!race || race.gpxPoints.length < 2) continue
+      const ll = latLngAtPosition(race.gpxPoints, pos)
+      if (!ll) continue
+      out.push({ lat: ll[0], lng: ll[1], color: r.color })
+    }
+    return out
+  }, [showRunners, runnersData, timeIndex, visibleRaces, racesById])
+
+  // Combined draw list for the canvas overlay (bottom → top)
+  const canvasItems = useMemo<DrawItem[]>(() => {
+    const items: DrawItem[] = []
+    for (const h of heatPoints)
+      items.push({ lat: h.lat, lng: h.lng, r: 14 + h.intensity * 16, fill: '#DC2626', alpha: 0.08 + h.intensity * 0.18 })
+    for (const s of sharedPoints)
+      items.push({ lat: s.lat, lng: s.lng, r: 5, fill: '#A78BFA', alpha: 0.5 })
+    for (const d of densityCircles)
+      items.push({ lat: d.lat, lng: d.lng, r: Math.min(28, 8 + d.count * 0.8), fill: '#D97706', alpha: 0.22 })
+    for (const rd of runnerDots)
+      items.push({ lat: rd.lat, lng: rd.lng, r: 2.5, fill: rd.color, alpha: 0.85 })
+    return items
+  }, [heatPoints, sharedPoints, densityCircles, runnerDots])
 
   // Resolve the highlighted segment to a coordinate for fly-to
   let flyTarget: [number, number] | null = null
@@ -255,20 +384,6 @@ export default function LeafletMap({
 
         <FlyToHighlight target={flyTarget} />
 
-        {/* Aggregate heatmap (bottom layer) */}
-        {heatPoints.map((h, i) => (
-          <CircleMarker
-            key={`heat-${i}`}
-            center={[h.lat, h.lng]}
-            radius={14 + h.intensity * 16}
-            pathOptions={{
-              stroke: false,
-              fillColor: '#DC2626',
-              fillOpacity: 0.08 + h.intensity * 0.18,
-            }}
-          />
-        ))}
-
         {/* Race polylines */}
         {races.map((race) => {
           if (!visibleRaces.has(race.id)) return null
@@ -285,62 +400,8 @@ export default function LeafletMap({
           )
         })}
 
-        {/* Live density crowding (under the runner dots) */}
-        {densityCircles.map((d, i) => (
-          <CircleMarker
-            key={`dens-${i}`}
-            center={[d.lat, d.lng]}
-            radius={Math.min(28, 8 + d.count * 0.8)}
-            pathOptions={{
-              stroke: false,
-              fillColor: '#D97706',
-              fillOpacity: 0.22,
-            }}
-          />
-        ))}
-
-        {/* Shared segments (tronçons communs) */}
-        {sharedPoints.map((s, i) => (
-          <CircleMarker
-            key={`shared-${i}`}
-            center={[s.lat, s.lng]}
-            radius={9}
-            pathOptions={{
-              color: '#A78BFA',
-              fillColor: '#A78BFA',
-              fillOpacity: 0.25,
-              weight: 2,
-              dashArray: '3 3',
-            }}
-          >
-            <Tooltip>Tronçon commun</Tooltip>
-          </CircleMarker>
-        ))}
-
-        {/* Runner dots at current time (started, not finished) */}
-        {showRunners &&
-          runnersData.map((runner) => {
-            if (!visibleRaces.has(runner.raceId)) return null
-            const pos = runner.positions[timeIndex] ?? 0
-            if (pos <= 0 || pos >= 1) return null // not started or finished
-            const race = racesById.get(runner.raceId)
-            if (!race || race.gpxPoints.length < 2) return null
-            const latlng = latLngAtPosition(race.gpxPoints, pos)
-            if (!latlng) return null
-            return (
-              <CircleMarker
-                key={runner.runnerId}
-                center={latlng}
-                radius={2.5}
-                pathOptions={{
-                  color: runner.color,
-                  fillColor: runner.color,
-                  fillOpacity: 0.85,
-                  weight: 0,
-                }}
-              />
-            )
-          })}
+        {/* Heat / density / shared / runners drawn on one canvas (stable) */}
+        <CanvasOverlay items={canvasItems} />
 
         {/* Risk zone markers */}
         {showZones && riskMap.map((entry, i) => {

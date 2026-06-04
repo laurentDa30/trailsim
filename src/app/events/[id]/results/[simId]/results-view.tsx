@@ -288,6 +288,7 @@ export function ResultsView({
   const maxIndex = Math.max(0, timestamps.length - 1)
   const [timeIndex, setTimeIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(1) // playback multiplier
   // Map layers ("Couches actives")
   const [layers, setLayers] = useState({
     runners: true,
@@ -368,12 +369,12 @@ export function ResultsView({
         }
         return i + 1
       })
-    }, 120)
+    }, Math.max(16, 120 / speed))
     return () => {
       if (playRef.current) clearInterval(playRef.current)
       playRef.current = null
     }
-  }, [playing, maxIndex])
+  }, [playing, maxIndex, speed])
 
   // Runners currently on course (started, not finished) at the active time
   const runnersOnCourse = useMemo(() => {
@@ -385,17 +386,25 @@ export function ResultsView({
     return n
   }, [runnersData, timeIndex])
 
-  // Leader distance (km) at the active time → progress cursor on the profile
-  const leaderDist = useMemo(() => {
-    let best = 0
-    for (const r of runnersData) {
-      const race = races.find((rr) => rr.id === r.raceId)
-      if (!race || race.gpxPoints.length === 0) continue
-      const total = race.gpxPoints[race.gpxPoints.length - 1].dist
-      const p = r.positions[timeIndex] ?? 0
-      if (p < 1) best = Math.max(best, p * total)
+  // Leader distance (km) per race at the active time → progress cursor.
+  // Include finished runners (clamp to 1) so the cursor stays at the end
+  // instead of snapping back to 0 once everyone has finished.
+  const leaderDistByRace = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const race of races) {
+      if (race.gpxPoints.length > 0) {
+        totals.set(race.id, race.gpxPoints[race.gpxPoints.length - 1].dist)
+      }
     }
-    return best
+    const out: Record<string, number> = {}
+    for (const r of runnersData) {
+      const total = totals.get(r.raceId)
+      if (total == null) continue
+      const p = Math.min(1, r.positions[timeIndex] ?? 0)
+      const d = p * total
+      if (d > (out[r.raceId] ?? 0)) out[r.raceId] = d
+    }
+    return out
   }, [runnersData, timeIndex, races])
 
   const rawRiskMap = useMemo(() => result?.riskMap ?? [], [result])
@@ -589,7 +598,7 @@ export function ResultsView({
             races={races}
             riskMap={riskMap}
             visibleRaces={visibleRaces}
-            cursorDist={leaderDist}
+            cursorByRace={leaderDistByRace}
             onHover={setHoverPoint}
           />
         </div>
@@ -1018,6 +1027,8 @@ export function ResultsView({
         playing={playing}
         runnersOnCourse={runnersOnCourse}
         totalRunners={simulation.totalRunners}
+        speed={speed}
+        onSpeedChange={setSpeed}
         onScrub={(i) => {
           setPlaying(false)
           setTimeIndex(i)

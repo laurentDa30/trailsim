@@ -387,6 +387,13 @@ async function runSimulation(config: SimConfig): Promise<void> {
 
           if (nearestBIdx < 0) continue
 
+          // Skip the start area: each race starts with its own wave offset, so
+          // overlap near both start lines is just the staggered départ, not a
+          // genuine catch-up between courses. Require both to be past ~0.6 km.
+          const distA = ptsA[si].dist
+          const distB = ptsB[nearestBIdx].dist
+          if (distA < 0.6 && distB < 0.6) continue
+
           // Check for temporal overlap
           let windowStart = -1
           let windowEnd = -1

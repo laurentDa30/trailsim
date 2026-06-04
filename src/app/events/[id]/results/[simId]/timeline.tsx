@@ -8,11 +8,15 @@ interface TimelineProps {
   playing: boolean
   runnersOnCourse: number
   totalRunners: number
+  speed: number
+  onSpeedChange: (s: number) => void
   onScrub: (index: number) => void
   onTogglePlay: () => void
   onStepStart: () => void
   onStepEnd: () => void
 }
+
+const SPEEDS = [0.5, 1, 2, 4, 8]
 
 function formatClock(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -33,6 +37,8 @@ export function Timeline({
   playing,
   runnersOnCourse,
   totalRunners,
+  speed,
+  onSpeedChange,
   onScrub,
   onTogglePlay,
   onStepStart,
@@ -127,6 +133,31 @@ export function Timeline({
           className="absolute left-0 right-0 w-full appearance-none cursor-pointer bg-transparent"
           style={{ accentColor: 'var(--color-lime)' }}
         />
+      </div>
+
+      {/* Speed selector */}
+      <div
+        className="flex items-center gap-0.5 shrink-0 rounded-lg p-0.5"
+        style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}
+      >
+        {SPEEDS.map((s) => {
+          const active = speed === s
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onSpeedChange(s)}
+              className="px-1.5 py-0.5 rounded text-[11px] font-mono tabular-nums transition-colors"
+              style={{
+                background: active ? 'var(--color-lime)' : 'transparent',
+                color: active ? '#0d1a00' : 'var(--color-ink-3)',
+                fontWeight: active ? 700 : 400,
+              }}
+            >
+              {s}×
+            </button>
+          )
+        })}
       </div>
 
       {/* Runners on course */}
