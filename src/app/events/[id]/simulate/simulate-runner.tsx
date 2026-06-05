@@ -32,29 +32,51 @@ interface SimulateRunnerProps {
   }[]
 }
 
-const LOG_LINES = [
-  'Initialisation du moteur Monte-Carlo...',
-  'Chargement des profils coureurs...',
-  'Analyse du tracé GPX...',
-  'Calcul des coefficients Minetti...',
-  'Simulation run 1/100...',
-  'Détection zones de densité...',
-  'Run 10/100 — progression nominale',
-  'Analyse météo : T+18°C vent 0km/h',
-  'Run 25/100...',
-  'Zone critique détectée : km 8.2',
-  'Run 40/100 — 142 coureurs simulés',
-  'Analyse bouchons : densité 47 crs/km',
-  'Run 55/100...',
-  'Fenêtre collision : 08h12–09h15 (50/20km)',
-  'Run 70/100 — convergence stable',
-  'Affinement probabilités...',
-  'Run 85/100...',
-  'Finalisation carte de risque...',
-  'Run 100/100 — calcul terminé ✓',
-  'Export résultats...',
-  'Précision Monte-Carlo : 94.2%',
-]
+interface LogSource {
+  totalRunners: number
+  temperature: number
+  wind: number
+  rain: boolean
+  fog: boolean
+  jamThreshold: number
+  nProfiles: number
+  nRaces: number
+  nConstraints: number
+}
+
+/** Build the simulation log from the real configuration (no hardcoded values). */
+function buildLogLines(s: LogSource): string[] {
+  const weather =
+    `T+${s.temperature}°C · vent ${s.wind} km/h` +
+    (s.rain ? ' · pluie' : '') +
+    (s.fog ? ' · brouillard' : '')
+  return [
+    'Initialisation du moteur Monte-Carlo…',
+    `Chargement de ${s.nProfiles} profil(s) coureur…`,
+    `Analyse de ${s.nRaces} tracé(s) GPX…`,
+    'Calcul des coefficients Minetti (pente)…',
+    `Météo : ${weather}`,
+    `Peloton : ${s.totalRunners.toLocaleString('fr-FR')} coureurs`,
+    s.nConstraints > 0
+      ? `${s.nConstraints} portion(s) sensible(s) prise(s) en compte`
+      : 'Aucune portion sensible marquée',
+    `Seuil de bouchon : ${s.jamThreshold} coureurs`,
+    'Départs en vagues différées…',
+    'Run 1/100…',
+    'Accumulation des densités par tranche de 150 m…',
+    'Run 25/100…',
+    'Détection des bouchons (sections saturées)…',
+    'Run 50/100…',
+    s.nRaces > 1
+      ? 'Analyse des rencontres inter-courses…'
+      : 'Course unique — pas de rencontre inter-courses',
+    'Run 75/100…',
+    'Affinement des probabilités…',
+    'Run 100/100…',
+    'Finalisation de la carte de risque…',
+    'Calcul terminé ✓',
+  ]
+}
 
 export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps) {
   const { state, run } = useSimulation()
@@ -134,7 +156,19 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
       jamThreshold: simulation.jamThreshold,
     }
 
-    run(config, LOG_LINES)
+    const logLines = buildLogLines({
+      totalRunners: simulation.totalRunners,
+      temperature: simulation.temperature,
+      wind: simulation.wind,
+      rain: simulation.rain,
+      fog: simulation.fog,
+      jamThreshold: simulation.jamThreshold,
+      nProfiles: simulation.runnerProfiles.length,
+      nRaces: races.length,
+      nConstraints: races.reduce((sum, r) => sum + r.segments.length, 0),
+    })
+
+    run(config, logLines)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save result when done
@@ -433,9 +467,9 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
                         </span>
                         <span
                           style={{
-                            color: line.includes('✓') || line.includes('Précision')
+                            color: line.includes('✓') || line.includes('terminé')
                               ? '#4ade80'
-                              : line.includes('détecté') || line.includes('collision') || line.includes('bouchon') || line.includes('critique')
+                              : line.includes('bouchon') || line.includes('rencontre') || line.includes('sensible')
                                 ? '#fbbf24'
                                 : '#6b6861',
                           }}
