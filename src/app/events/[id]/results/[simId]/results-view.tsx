@@ -227,11 +227,13 @@ function StatTile({
   icon,
   label,
   value,
+  sub,
   tone,
 }: {
   icon: React.ReactNode
   label: string
   value: string
+  sub?: string
   tone?: 'warning'
 }) {
   return (
@@ -249,6 +251,11 @@ function StatTile({
       >
         {value}
       </span>
+      {sub && (
+        <span className="text-[10px] truncate" style={{ color: 'var(--color-ink-4)' }}>
+          {sub}
+        </span>
+      )}
     </div>
   )
 }
@@ -267,6 +274,7 @@ export function ResultsView({
     raceId: string
     segmentIndex: number
   } | null>(null)
+  const [highlightedCollision, setHighlightedCollision] = useState<number | null>(null)
 
   const toggleRace = useCallback((raceId: string) => {
     setVisibleRaces((prev) => {
@@ -281,9 +289,26 @@ export function ResultsView({
   }, [])
 
   // --- Timeline / playback state ---
-  const timestamps = useMemo(() => result?.globalTimestamps ?? [], [result])
+  const rawTimestamps = useMemo(() => result?.globalTimestamps ?? [], [result])
   const runnersData = useMemo(() => result?.runnersData ?? [], [result])
-  const maxIndex = Math.max(0, timestamps.length - 1)
+  // Cap the timeline to the last moment a runner is still on course, so the
+  // playback ends with the last finisher instead of a long empty tail.
+  const maxIndex = useMemo(() => {
+    let last = 0
+    for (let t = 0; t < rawTimestamps.length; t++) {
+      let active = false
+      for (const r of runnersData) {
+        const p = r.positions[t] ?? 0
+        if (p > 0 && p < 1) {
+          active = true
+          break
+        }
+      }
+      if (active) last = t
+    }
+    return Math.min(Math.max(0, rawTimestamps.length - 1), last + 2)
+  }, [rawTimestamps, runnersData])
+  const timestamps = useMemo(() => rawTimestamps.slice(0, maxIndex + 1), [rawTimestamps, maxIndex])
   const [timeIndex, setTimeIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1) // playback multiplier
@@ -434,19 +459,24 @@ export function ResultsView({
     return set
   }, [collisionWindows])
 
-  // First finisher: earliest timestamp where any runner reaches the finish
-  const firstFinishSeconds = useMemo(() => {
+  // First finisher: earliest time any runner reaches the finish, + which race
+  const firstFinish = useMemo(() => {
     let best = Infinity
+    let raceId: string | null = null
     for (const r of runnersData) {
       for (let t = 0; t < r.positions.length; t++) {
         if (r.positions[t] >= 1) {
-          if (timestamps[t] < best) best = timestamps[t]
+          const sec = rawTimestamps[t]
+          if (sec != null && sec < best) {
+            best = sec
+            raceId = r.raceId
+          }
           break
         }
       }
     }
-    return isFinite(best) ? best : null
-  }, [runnersData, timestamps])
+    return isFinite(best) ? { seconds: best, raceId } : null
+  }, [runnersData, rawTimestamps])
 
   // DNF estimate: Σ runners(profile) × abandonRate, averaged over profiles
   const dnfEstimate = useMemo(() => {
@@ -505,6 +535,7 @@ export function ResultsView({
               collisionWindows={collisionWindows}
               visibleRaces={visibleRaces}
               highlightedSegment={highlightedSegment}
+              highlightedCollision={highlightedCollision}
               runnersData={runnersData}
               timeIndex={timeIndex}
               showRunners={layers.runners}
@@ -590,24 +621,32 @@ export function ResultsView({
             <div className="p-3 grid grid-cols-2 gap-2">
               <StatTile
                 icon={<FlagIcon size={12} />}
-                label="Premier arrivé"
-                value={firstFinishSeconds != null ? formatTimeHHMM(firstFinishSeconds) : '—'}
+                label="1er arrivé (T+)"
+                value={firstFinish ? formatTimeHHMM(firstFinish.seconds) : '—'}
+                sub={
+                  firstFinish
+                    ? races.find((r) => r.id === firstFinish.raceId)?.name ?? 'course inconnue'
+                    : 'toutes courses'
+                }
               />
               <StatTile
                 icon={<TrendingDownIcon size={12} />}
                 label="DNF estimés"
-                value={String(dnfEstimate)}
+                value={`≈ ${dnfEstimate}`}
+                sub="toutes courses"
                 tone="warning"
               />
               <StatTile
                 icon={<UsersIcon size={12} />}
                 label="Pic en piste"
                 value={String(peakOnCourse)}
+                sub="max coureurs simultanés"
               />
               <StatTile
                 icon={<AlertTriangleIcon size={12} />}
-                label="Zones détectées"
+                label="Zones à risque"
                 value={String(riskMap.length)}
+                sub="toutes courses"
               />
             </div>
           </Section>
@@ -798,11 +837,18 @@ export function ResultsView({
                 )
                 const ptRace = resolved[0]
                 const dist = ptRace?.gpxPoints[cw.segmentIndex]?.dist
+                const isHL = highlightedCollision === i
                 return (
-                  <div
+                  <button
                     key={i}
-                    className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg"
-                    style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}
+                    type="button"
+                    onClick={() => setHighlightedCollision(isHL ? null : i)}
+                    className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg text-left w-full transition-colors"
+                    style={{
+                      background: 'var(--color-bg-2)',
+                      border: '1px solid',
+                      borderColor: isHL ? 'var(--color-lime)' : 'var(--color-line)',
+                    }}
                   >
                     {/* Which courses meet */}
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -850,7 +896,7 @@ export function ResultsView({
                         jusqu&apos;à {Math.round(cw.peak)} coureurs
                       </span>
                     </div>
-                  </div>
+                  </button>
                 )
               })}
             </div>

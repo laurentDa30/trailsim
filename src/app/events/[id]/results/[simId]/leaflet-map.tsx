@@ -146,6 +146,7 @@ interface LeafletMapProps {
   riskMap: RiskMapEntry[]
   visibleRaces: Set<string>
   highlightedSegment: { raceId: string; segmentIndex: number } | null
+  highlightedCollision?: number | null
   rawRiskMap?: RiskMapEntry[]
   collisionWindows?: CollisionWindow[]
   runnersData?: RunnerData[]
@@ -198,19 +199,6 @@ function PlacementHandler({
   return null
 }
 
-/** Flies the map to the highlighted segment whenever it changes. */
-function FlyToHighlight({
-  target,
-}: {
-  target: [number, number] | null
-}) {
-  const map = useMap()
-  useEffect(() => {
-    if (target) map.flyTo(target, Math.max(map.getZoom(), 14), { duration: 0.6 })
-  }, [target, map])
-  return null
-}
-
 /** Interpolate a [lat,lng] along a track from a 0–1 position fraction. */
 function latLngAtPosition(points: GPXPoint[], position: number): [number, number] | null {
   const n = points.length
@@ -251,7 +239,9 @@ export default function LeafletMap({
   riskMap,
   visibleRaces,
   highlightedSegment,
+  highlightedCollision = null,
   rawRiskMap = [],
+  collisionWindows = [],
   runnersData = [],
   timeIndex = 0,
   showRunners = true,
@@ -296,7 +286,7 @@ export default function LeafletMap({
     }
     const out: { lat: number; lng: number; count: number }[] = []
     for (const e of bins.values()) {
-      if (e.count < 6) continue // only surface genuine crowding
+      if (e.count < 3) continue // only surface genuine crowding
       out.push({ lat: e.latSum / e.count, lng: e.lngSum / e.count, count: e.count })
     }
     return out
@@ -380,20 +370,27 @@ export default function LeafletMap({
       items.push({ lat: s.lat, lng: s.lng, r: 22, fill: '#A78BFA', alpha: 0.3, soft: true })
     // Live density — soft amber cloud where runners bunch up now
     for (const d of densityCircles)
-      items.push({ lat: d.lat, lng: d.lng, r: Math.min(34, 14 + d.count * 0.9), fill: '#D97706', alpha: 0.28, soft: true })
+      items.push({ lat: d.lat, lng: d.lng, r: Math.min(42, 18 + d.count * 1.1), fill: '#F59E0B', alpha: 0.5, soft: true })
     // Runners — crisp dots on top
     for (const rd of runnerDots)
       items.push({ lat: rd.lat, lng: rd.lng, r: 2.5, fill: rd.color, alpha: 0.85 })
     return items
   }, [heatPoints, sharedPoints, densityCircles, runnerDots])
 
-  // Resolve the highlighted segment to a coordinate for fly-to
-  let flyTarget: [number, number] | null = null
-  if (highlightedSegment) {
-    const hlRace = racesById.get(highlightedSegment.raceId)
-    const hlPt = hlRace?.gpxPoints[highlightedSegment.segmentIndex]
-    if (hlPt) flyTarget = [hlPt.lat, hlPt.lng]
-  }
+  // Collision markers (where two courses meet), placed on the first race's point
+  const collisionMarkers = useMemo(() => {
+    return collisionWindows
+      .map((cw, i) => {
+        const race = racesById.get(cw.raceIds[0])
+        const pt = race?.gpxPoints[cw.segmentIndex]
+        if (!pt) return null
+        const names = cw.raceIds
+          .map((rid) => racesById.get(rid)?.name ?? '?')
+          .join(' ↔ ')
+        return { i, lat: pt.lat, lng: pt.lng, names, cw }
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+  }, [collisionWindows, racesById])
 
   return (
     <>
@@ -409,8 +406,6 @@ export default function LeafletMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="© OpenStreetMap"
         />
-
-        <FlyToHighlight target={flyTarget} />
 
         {/* Race polylines */}
         {races.map((race) => {
@@ -458,6 +453,33 @@ export default function LeafletMap({
                   {race.name} · km {point.dist.toFixed(1)}
                   <br />
                   Risque : {Math.round(entry.riskScore * 100)}
+                </span>
+              </Tooltip>
+            </CircleMarker>
+          )
+        })}
+
+        {/* Collision markers (where two courses meet) */}
+        {collisionMarkers.map((m) => {
+          const hl = highlightedCollision === m.i
+          const h = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, '0')}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`
+          return (
+            <CircleMarker
+              key={`coll-${m.i}`}
+              center={[m.lat, m.lng]}
+              radius={hl ? 13 : 8}
+              pathOptions={{
+                color: '#ffffff',
+                fillColor: '#A78BFA',
+                fillOpacity: hl ? 0.95 : 0.7,
+                weight: hl ? 3 : 1.5,
+              }}
+            >
+              <Tooltip>
+                <span>
+                  Rencontre : {m.names}
+                  <br />
+                  {h(m.cw.tStart)} → {h(m.cw.tEnd)} · jusqu&apos;à {Math.round(m.cw.peak)} coureurs
                 </span>
               </Tooltip>
             </CircleMarker>
