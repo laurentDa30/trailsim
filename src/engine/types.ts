@@ -32,6 +32,7 @@ export interface Runner {
   fatigueFactor: number
   techSkill: number
   ravitoDuration: number
+  abandonRate: number
   color: string
 }
 
@@ -42,6 +43,8 @@ export interface RunnerState {
   timeElapsed: number   // seconds since own start
   energy: number        // 0-1
   finished: boolean
+  abandoned: boolean
+  abandonAt: number     // 0-1 position where this runner DNFs (>1 = finishes)
   atRavito: number      // seconds remaining at ravito stop
 }
 

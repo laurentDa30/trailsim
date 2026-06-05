@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { AlertTriangleIcon, Trash2Icon } from 'lucide-react'
+import { AlertTriangleIcon, Trash2Icon, MapPinIcon } from 'lucide-react'
 import type { GPXPoint } from '@/engine/types'
 import { CONSTRAINT_PRESETS, presetOf } from './constraint-presets'
 import type { ConstraintMarker } from './constraint-map'
+import { LOGI_TYPES, logiTypeOf, type PlacedLogi } from '@/lib/logistics'
 
 const ConstraintMap = dynamic(() => import('./constraint-map'), {
   ssr: false,
@@ -25,6 +26,8 @@ interface Step4ConstraintsProps {
   races: RaceLike[]
   jamThreshold: number
   onJamThresholdChange: (v: number) => void
+  logistics: PlacedLogi[]
+  onLogisticsChange: (l: PlacedLogi[]) => void
 }
 
 export function Step4Constraints({
@@ -32,6 +35,8 @@ export function Step4Constraints({
   races,
   jamThreshold,
   onJamThresholdChange,
+  logistics,
+  onLogisticsChange,
 }: Step4ConstraintsProps) {
   // Parse GPX once for the map
   const parsedRaces = useMemo(
@@ -54,6 +59,21 @@ export function Step4Constraints({
     )
   )
   const [placingPreset, setPlacingPreset] = useState<string | null>(null)
+  const [placingLogiType, setPlacingLogiType] = useState<string | null>(null)
+
+  function newId() {
+    return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `logi-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
+
+  function handlePlaceLogi(type: string, lat: number, lng: number) {
+    onLogisticsChange([...logistics, { id: newId(), type, lat, lng }])
+  }
+
+  function handleRemoveLogi(id: string) {
+    onLogisticsChange(logistics.filter((l) => l.id !== id))
+  }
 
   async function handlePlace(raceId: string, indexStart: number, lat: number, lng: number) {
     if (!placingPreset) return
@@ -97,47 +117,99 @@ export function Step4Constraints({
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold" style={{ color: 'var(--color-ink)' }}>
-          Points sensibles
+          Points sensibles & logistique
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--color-ink-3)' }}>
-          Marquez les portions étroites ou techniques où l&apos;on ne peut pas doubler — c&apos;est
-          là que les bouchons se forment. Choisissez un type puis cliquez sur le tracé.
+          Marquez les portions étroites/techniques où l&apos;on ne peut pas doubler (les bouchons s&apos;y
+          forment) et positionnez votre logistique terrain. Choisissez un type puis cliquez sur la carte.
         </p>
       </div>
 
-      {/* Preset buttons */}
-      <div className="flex flex-wrap gap-2">
-        {CONSTRAINT_PRESETS.map((p) => {
-          const active = placingPreset === p.type
-          return (
-            <button
-              key={p.type}
-              type="button"
-              onClick={() => setPlacingPreset((cur) => (cur === p.type ? null : p.type))}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors"
-              style={{
-                background: active ? 'var(--color-bg-2)' : 'var(--color-bg-1)',
-                border: '1px solid',
-                borderColor: active ? p.color : 'var(--color-line)',
-              }}
-            >
-              <span
-                className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[11px] font-bold text-white"
-                style={{ background: p.color }}
+      {/* Preset buttons — portions sensibles (snap to trace) */}
+      <div>
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+          Portions sensibles (sur le tracé)
+        </span>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {CONSTRAINT_PRESETS.map((p) => {
+            const active = placingPreset === p.type
+            return (
+              <button
+                key={p.type}
+                type="button"
+                onClick={() => {
+                  setPlacingLogiType(null)
+                  setPlacingPreset((cur) => (cur === p.type ? null : p.type))
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors"
+                style={{
+                  background: active ? 'var(--color-bg-2)' : 'var(--color-bg-1)',
+                  border: '1px solid',
+                  borderColor: active ? p.color : 'var(--color-line)',
+                }}
               >
-                {p.letter}
-              </span>
-              <span className="flex flex-col">
+                <span
+                  className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[11px] font-bold text-white"
+                  style={{ background: p.color }}
+                >
+                  {p.letter}
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-sm" style={{ color: 'var(--color-ink)' }}>
+                    {p.label}
+                  </span>
+                  <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
+                    {p.description}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Logistics buttons — free placement */}
+      <div>
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+          Logistique terrain (placement libre)
+        </span>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {LOGI_TYPES.map((t) => {
+            const active = placingLogiType === t.type
+            const count = logistics.filter((l) => l.type === t.type).length
+            return (
+              <button
+                key={t.type}
+                type="button"
+                onClick={() => {
+                  setPlacingPreset(null)
+                  setPlacingLogiType((cur) => (cur === t.type ? null : t.type))
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors"
+                style={{
+                  background: active ? 'var(--color-bg-2)' : 'var(--color-bg-1)',
+                  border: '1px solid',
+                  borderColor: active ? t.color : 'var(--color-line)',
+                }}
+              >
+                <span
+                  className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold text-white"
+                  style={{ background: t.color }}
+                >
+                  {t.letter}
+                </span>
                 <span className="text-sm" style={{ color: 'var(--color-ink)' }}>
-                  {p.label}
+                  {t.label}
                 </span>
-                <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
-                  {p.description}
-                </span>
-              </span>
-            </button>
-          )
-        })}
+                {count > 0 && (
+                  <span className="text-[11px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
+                    ×{count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Map */}
@@ -152,6 +224,10 @@ export function Step4Constraints({
             placingPreset={placingPreset}
             onPlace={handlePlace}
             onRemove={handleRemove}
+            logistics={logistics}
+            placingLogiType={placingLogiType}
+            onPlaceLogi={handlePlaceLogi}
+            onRemoveLogi={handleRemoveLogi}
           />
         ) : (
           <div
@@ -170,6 +246,18 @@ export function Step4Constraints({
             <AlertTriangleIcon size={14} style={{ color: presetOf(placingPreset).color }} />
             <span className="text-xs" style={{ color: 'var(--color-ink)' }}>
               Cliquez sur le tracé pour placer : <b>{presetOf(placingPreset).label}</b>
+            </span>
+          </div>
+        )}
+
+        {placingLogiType && (
+          <div
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg"
+            style={{ background: 'var(--color-bg-1)', border: `1px solid ${logiTypeOf(placingLogiType).color}` }}
+          >
+            <MapPinIcon size={14} style={{ color: logiTypeOf(placingLogiType).color }} />
+            <span className="text-xs" style={{ color: 'var(--color-ink)' }}>
+              Cliquez n&apos;importe où pour placer : <b>{logiTypeOf(placingLogiType).label}</b>
             </span>
           </div>
         )}

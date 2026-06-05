@@ -150,6 +150,8 @@ async function runSimulation(config: SimConfig): Promise<void> {
       // Initialise runner states, keyed by runnerId
       const stateMap = new Map<string, RunnerState>()
       for (const runner of allRunners) {
+        // Decide up-front whether this runner DNFs, and where (30–95% of race)
+        const willAbandon = Math.random() < runner.abandonRate
         stateMap.set(runner.id, {
           position: 0,
           distanceDone: 0,
@@ -157,6 +159,8 @@ async function runSimulation(config: SimConfig): Promise<void> {
           timeElapsed: 0,
           energy: 1.0,
           finished: false,
+          abandoned: false,
+          abandonAt: willAbandon ? 0.3 + Math.random() * 0.65 : Infinity,
           atRavito: 0,
         })
       }
@@ -300,7 +304,9 @@ async function runSimulation(config: SimConfig): Promise<void> {
             : absSlope > 15
             ? 0.7 + runner.techSkill * 0.15
             : 1.0
-          const terrainFactor = slopeTerrain * (techMult[segIdx] ?? 1)
+          // Per-profile climbing / descending ability (higher = better)
+          const abilityFactor = slopePct >= 0 ? runner.climbCoeff : runner.descentCoeff
+          const terrainFactor = slopeTerrain * (techMult[segIdx] ?? 1) * abilityFactor
 
           // Speed in km/h
           const speed = computeSpeed(
@@ -338,6 +344,12 @@ async function runSimulation(config: SimConfig): Promise<void> {
               state.atRavito = runner.ravitoDuration
               break
             }
+          }
+
+          // DNF: the runner abandons before the finish and leaves the course
+          if (!state.finished && state.position >= state.abandonAt) {
+            state.abandoned = true
+            state.finished = true
           }
 
           // Check finish

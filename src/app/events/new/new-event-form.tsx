@@ -198,7 +198,7 @@ export function NewEventForm() {
           className="h-10 px-5 rounded-lg text-sm font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex-1"
           style={{
             backgroundColor: "var(--color-lime)",
-            color: "#0d1a00",
+            color: "#ffffff",
           }}
         >
           {loading ? "Création…" : "Créer et configurer →"}

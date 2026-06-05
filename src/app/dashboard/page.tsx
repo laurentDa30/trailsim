@@ -87,7 +87,7 @@ export default async function DashboardPage() {
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 hover:opacity-90"
             style={{
               backgroundColor: "var(--color-lime)",
-              color: "#0d1a00",
+              color: "#ffffff",
             }}
           >
             <Plus size={15} />
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
               className="inline-flex items-center gap-2 h-9 px-5 rounded-lg text-sm font-medium transition-all duration-150 hover:opacity-90"
               style={{
                 backgroundColor: "var(--color-lime)",
-                color: "#0d1a00",
+                color: "#ffffff",
               }}
             >
               <Plus size={14} />

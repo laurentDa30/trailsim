@@ -15,7 +15,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: [
-    'bg-[var(--color-lime)] text-[#0d1a00] font-medium',
+    'bg-[var(--color-lime)] text-[#ffffff] font-medium',
     'hover:opacity-[0.88]',
     'disabled:opacity-40 disabled:cursor-not-allowed',
   ].join(' '),

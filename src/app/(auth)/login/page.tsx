@@ -27,7 +27,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-3 relative z-10">
           <div
             className="flex items-center justify-center w-10 h-10 rounded-lg"
-            style={{ backgroundColor: "#0d1a00" }}
+            style={{ backgroundColor: "#ffffff" }}
           >
             {/* SVG altimetry profile icon */}
             <svg
@@ -168,7 +168,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-3 mb-10 md:hidden">
           <div
             className="flex items-center justify-center w-9 h-9 rounded-lg"
-            style={{ backgroundColor: "#0d1a00" }}
+            style={{ backgroundColor: "#ffffff" }}
           >
             <svg
               width="20"

@@ -9,6 +9,7 @@ import { Step2Peloton, type PelotonData } from './step2-peloton'
 import { Step3Conditions, type WeatherData } from './step3-conditions'
 import { Step4Constraints } from './step4-constraints'
 import { Topbar } from '@/components/layout/topbar'
+import type { PlacedLogi } from '@/lib/logistics'
 import type { Race, Segment, Simulation } from '@prisma/client'
 import { useRouter } from 'next/navigation'
 
@@ -55,6 +56,15 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   })
 
   const [jamThreshold, setJamThreshold] = useState<number>(simulation?.jamThreshold ?? 10)
+
+  const [logistics, setLogistics] = useState<PlacedLogi[]>(() => {
+    try {
+      if (simulation?.logistique) return JSON.parse(simulation.logistique) as PlacedLogi[]
+    } catch {
+      /* ignore */
+    }
+    return []
+  })
 
   const pelotonRef = useRef<PelotonData | null>(null)
   const weatherRef = useRef<WeatherData>({
@@ -122,6 +132,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           fog: weather.fog,
           jamThreshold,
           runnerProfiles: peloton.profiles,
+          logistique: JSON.stringify(logistics),
           ressources: JSON.stringify({
             effectifTotal: resources.effectif,
             barrieres: resources.barrieres,
@@ -166,7 +177,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
                     onClick={() => isDone && setStep(s.n)}
                     className={cn(
                       'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all',
-                      isActive && 'bg-[var(--color-lime)] text-[#0d1a00]',
+                      isActive && 'bg-[var(--color-lime)] text-[#ffffff]',
                       isDone && 'bg-[color-mix(in_srgb,var(--color-lime)_20%,transparent)] text-[var(--color-lime)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-lime)_30%,transparent)]',
                       !isActive && !isDone && 'bg-[var(--color-bg-2)] text-[var(--color-ink-4)] cursor-default'
                     )}
@@ -176,7 +187,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
                     ) : (
                       <span className={cn(
                         'w-4 h-4 rounded-full flex items-center justify-center text-xs',
-                        isActive ? 'bg-[#0d1a00] text-[var(--color-lime)]' : 'bg-[var(--color-bg-1)] text-[var(--color-ink-4)]'
+                        isActive ? 'bg-[#ffffff] text-[var(--color-lime)]' : 'bg-[var(--color-bg-1)] text-[var(--color-ink-4)]'
                       )}>
                         {s.n}
                       </span>
@@ -227,6 +238,8 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               races={races}
               jamThreshold={jamThreshold}
               onJamThresholdChange={setJamThreshold}
+              logistics={logistics}
+              onLogisticsChange={setLogistics}
             />
           )}
         </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Calendar, MapPin, Settings, Play, BarChart2, Users, Trash2 } from "lucide-react"
+import { Calendar, MapPin, Settings, BarChart2, Users, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type SimulationStatus = "PENDING" | "RUNNING" | "DONE" | "ERROR"
@@ -130,12 +130,16 @@ function SimulationBlock({
   }
 
   if (simulation.status === "DONE") {
-    // Try to parse risk score from resultSnapshot
+    // Max risk across detected zones (from the compressed result snapshot)
     let riskScore = 0
+    let zones = 0
     if (simulation.resultSnapshot) {
       try {
         const snap = JSON.parse(simulation.resultSnapshot)
-        riskScore = snap.maxRiskScore ?? snap.riskScore ?? 0
+        const riskMap: { riskScore: number }[] = Array.isArray(snap.riskMap) ? snap.riskMap : []
+        zones = riskMap.length
+        riskScore = riskMap.reduce((m, e) => Math.max(m, e.riskScore ?? 0), 0)
+        riskScore = Math.round(riskScore * 100)
       } catch {
         riskScore = 0
       }
@@ -143,10 +147,15 @@ function SimulationBlock({
 
     return (
       <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs" style={{ color: "var(--color-ink-4)" }}>
+            Risque max
+          </span>
+          <span className="text-xs" style={{ color: "var(--color-ink-4)" }}>
+            {zones} zone{zones > 1 ? "s" : ""}
+          </span>
+        </div>
         <RiskBar score={riskScore} />
-        <span className="text-xs" style={{ color: "var(--color-ink-4)" }}>
-          100 runs · Terminé
-        </span>
       </div>
     )
   }
@@ -346,22 +355,6 @@ export function EventCard({
         >
           <Settings size={12} />
           Config
-        </Link>
-
-        <Link
-          href={`/events/${id}/simulate`}
-          className={cn(
-            "flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium flex-1 justify-center transition-all duration-150",
-            "border hover:opacity-80"
-          )}
-          style={{
-            backgroundColor: "var(--color-bg-2)",
-            borderColor: "var(--color-line)",
-            color: "var(--color-ink-3)",
-          }}
-        >
-          <Play size={12} />
-          Simulation
         </Link>
 
         <Link

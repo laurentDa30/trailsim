@@ -77,7 +77,7 @@ export function Timeline({
           onClick={onTogglePlay}
           disabled={disabled}
           className={btn}
-          style={{ background: 'var(--color-lime)', color: '#0d1a00', width: 36, height: 36 }}
+          style={{ background: 'var(--color-lime)', color: '#ffffff', width: 36, height: 36 }}
           aria-label={playing ? 'Pause' : 'Lecture'}
         >
           {playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
@@ -150,7 +150,7 @@ export function Timeline({
               className="px-1.5 py-0.5 rounded text-[11px] font-mono tabular-nums transition-colors"
               style={{
                 background: active ? 'var(--color-lime)' : 'transparent',
-                color: active ? '#0d1a00' : 'var(--color-ink-3)',
+                color: active ? '#ffffff' : 'var(--color-ink-3)',
                 fontWeight: active ? 700 : 400,
               }}
             >

@@ -256,7 +256,7 @@ export function Step1Courses({
                         className={cn(
                           'px-2.5 py-1 rounded-md text-xs transition-colors',
                           race.startTime === t.value
-                            ? 'bg-[var(--color-lime)] text-[#0d1a00] font-medium'
+                            ? 'bg-[var(--color-lime)] text-[#ffffff] font-medium'
                             : 'bg-[var(--color-bg-2)] border border-[var(--color-line)] text-[var(--color-ink-3)] hover:text-[var(--color-ink)]'
                         )}
                       >

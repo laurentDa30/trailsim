@@ -73,6 +73,7 @@ export default async function ResultsPage({ params }: PageProps) {
         wind: simulation.wind,
         rain: simulation.rain,
         fog: simulation.fog,
+        logistique: simulation.logistique,
       }}
       result={result}
       races={parsedRaces}

@@ -45,6 +45,7 @@ export interface ResultsViewProps {
     wind: number
     rain: boolean
     fog: boolean
+    logistique?: string
   }
   result: CompressedSimulationResult | null
   races: {
@@ -302,15 +303,23 @@ export function ResultsView({
   const [hoverPoint, setHoverPoint] = useState<[number, number] | null>(null)
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // --- Interactive logistics placement (persisted to localStorage) ---
+  // --- Logistics: seeded from the configuration (simulation.logistique),
+  // with local tweaks persisted to localStorage per simulation ---
   const [placedLogistics, setPlacedLogistics] = useState<PlacedLogi[]>(() => {
     if (typeof window === 'undefined') return []
     try {
       const raw = localStorage.getItem(logiStorageKey(simulation.id))
-      return raw ? (JSON.parse(raw) as PlacedLogi[]) : []
+      if (raw) return JSON.parse(raw) as PlacedLogi[]
     } catch {
-      return []
+      /* ignore */
     }
+    // Fall back to the logistics defined during configuration
+    try {
+      if (simulation.logistique) return JSON.parse(simulation.logistique) as PlacedLogi[]
+    } catch {
+      /* ignore */
+    }
+    return []
   })
   const [placementType, setPlacementType] = useState<string | null>(null)
 

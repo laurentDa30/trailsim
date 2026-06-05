@@ -36,6 +36,7 @@ export function createRunnersFromProfiles(
         fatigueFactor: profile.fatigueFactor,
         techSkill: profile.techSkill,
         ravitoDuration: profile.ravitoDuration,
+        abandonRate: profile.abandonRate,
         color: profile.color,
       })
     }
