@@ -23,6 +23,18 @@ interface DrawItem {
   r: number
   fill: string
   alpha: number
+  /** Render as a soft radial blob (cloud) instead of a hard disc. */
+  soft?: boolean
+}
+
+/** "#RRGGBB" → "rgba(r,g,b,a)" */
+function hexToRgba(hex: string, a: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
+  if (!m) return hex
+  const r = parseInt(m[1], 16)
+  const g = parseInt(m[2], 16)
+  const b = parseInt(m[3], 16)
+  return `rgba(${r},${g},${b},${a})`
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -69,11 +81,23 @@ function CanvasOverlay({ items }: { items: DrawItem[] }) {
       ctx.clearRect(0, 0, size.x, size.y)
       for (const it of itemsRef.current) {
         const p = map.latLngToContainerPoint([it.lat, it.lng])
-        ctx.globalAlpha = it.alpha
-        ctx.fillStyle = it.fill
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, it.r, 0, Math.PI * 2)
-        ctx.fill()
+        if (it.soft) {
+          // Cloud: radial gradient fading to transparent at the edge
+          const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, it.r)
+          grad.addColorStop(0, hexToRgba(it.fill, it.alpha))
+          grad.addColorStop(1, hexToRgba(it.fill, 0))
+          ctx.fillStyle = grad
+          ctx.beginPath()
+          ctx.arc(p.x, p.y, it.r, 0, Math.PI * 2)
+          ctx.fill()
+        } else {
+          ctx.globalAlpha = it.alpha
+          ctx.fillStyle = it.fill
+          ctx.beginPath()
+          ctx.arc(p.x, p.y, it.r, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.globalAlpha = 1
+        }
       }
       ctx.globalAlpha = 1
     }
@@ -348,12 +372,16 @@ export default function LeafletMap({
   // Combined draw list for the canvas overlay (bottom → top)
   const canvasItems = useMemo<DrawItem[]>(() => {
     const items: DrawItem[] = []
+    // Heatmap — soft red cloud, aggregated over the whole simulation
     for (const h of heatPoints)
-      items.push({ lat: h.lat, lng: h.lng, r: 14 + h.intensity * 16, fill: '#DC2626', alpha: 0.08 + h.intensity * 0.18 })
+      items.push({ lat: h.lat, lng: h.lng, r: 22 + h.intensity * 20, fill: '#DC2626', alpha: 0.14 + h.intensity * 0.22, soft: true })
+    // Shared sections — soft violet cloud along the common track
     for (const s of sharedPoints)
-      items.push({ lat: s.lat, lng: s.lng, r: 5, fill: '#A78BFA', alpha: 0.5 })
+      items.push({ lat: s.lat, lng: s.lng, r: 22, fill: '#A78BFA', alpha: 0.3, soft: true })
+    // Live density — soft amber cloud where runners bunch up now
     for (const d of densityCircles)
-      items.push({ lat: d.lat, lng: d.lng, r: Math.min(28, 8 + d.count * 0.8), fill: '#D97706', alpha: 0.22 })
+      items.push({ lat: d.lat, lng: d.lng, r: Math.min(34, 14 + d.count * 0.9), fill: '#D97706', alpha: 0.28, soft: true })
+    // Runners — crisp dots on top
     for (const rd of runnerDots)
       items.push({ lat: rd.lat, lng: rd.lng, r: 2.5, fill: rd.color, alpha: 0.85 })
     return items
