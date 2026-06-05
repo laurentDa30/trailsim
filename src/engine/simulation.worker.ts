@@ -38,6 +38,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
 async function runSimulation(config: SimConfig): Promise<void> {
   try {
     const { races, weather, stepSeconds, nRuns, simulationId } = config
+    const JAM_RUNNERS = config.jamThreshold && config.jamThreshold > 0 ? config.jamThreshold : 10
 
     if (races.length === 0) {
       self.postMessage({ type: "ERROR", message: "No races configured" } satisfies WorkerMessage)
@@ -60,15 +61,29 @@ async function runSimulation(config: SimConfig): Promise<void> {
         if (dElev > 0) totalElevGain += dElev
       }
 
-      // Segment capacities (assume widthRatio = 0.5 for mountain trails)
-      const segmentCapacities: number[] = []
+      // Per-point segment length (m)
+      const segLenM: number[] = []
       for (let i = 0; i < pts.length - 1; i++) {
-        const segLenM = (pts[i + 1].dist - pts[i].dist) * 1000
-        segmentCapacities.push(computeSegmentCapacity(0.5, Math.max(1, segLenM)))
+        segLenM.push(Math.max(1, (pts[i + 1].dist - pts[i].dist) * 1000))
       }
-      // Last segment same as second-to-last
-      if (pts.length > 1) segmentCapacities.push(segmentCapacities[segmentCapacities.length - 1])
-      else segmentCapacities.push(1)
+      segLenM.push(segLenM.length > 0 ? segLenM[segLenM.length - 1] : 1)
+
+      // Default capacity assumes widthRatio = 0.5 for mountain trails
+      const segmentCapacities = segLenM.map((len) => computeSegmentCapacity(0.5, len))
+      // Technical slowdown multiplier per point (1 = none)
+      const techMult: number[] = new Array(pts.length).fill(1)
+
+      // Apply user-placed constraints (narrow / technical sections)
+      for (const c of race.constraints ?? []) {
+        const half = c.influenceKm / 2
+        for (let i = 0; i < pts.length; i++) {
+          if (Math.abs(pts[i].dist - c.dist) <= half) {
+            const cap = computeSegmentCapacity(c.widthRatio, segLenM[i])
+            segmentCapacities[i] = Math.min(segmentCapacities[i], cap)
+            techMult[i] = Math.min(techMult[i], 1 - c.techLevel * 0.04)
+          }
+        }
+      }
 
       // Distance bins for density, and the representative GPX point per bin
       const nBins = Math.max(1, Math.ceil(totalDist / DENSITY_BIN_KM))
@@ -80,7 +95,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
         binToSeg[b] = Math.min(pts.length - 1, segPtr)
       }
 
-      return { race, totalDist, totalElevGain, segmentCapacities, nBins, binToSeg }
+      return { race, totalDist, totalElevGain, segmentCapacities, techMult, nBins, binToSeg }
     })
 
     // Determine global time range across all runs
@@ -207,7 +222,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
           if (state.finished) continue
 
           const raceMet = raceMeta.find((m) => m.race.id === runner.raceId)!
-          const { race, totalDist, totalElevGain, segmentCapacities } = raceMet
+          const { race, totalDist, totalElevGain, segmentCapacities, techMult } = raceMet
 
           const raceStartTime = race.startOffset
           if (globalTime < raceStartTime) {
@@ -249,10 +264,16 @@ async function runSimulation(config: SimConfig): Promise<void> {
               localCount += counts.get(si) ?? 0
             }
           }
-          const capacity = Math.max(1, ...Array.from({ length: 11 }, (_, k) => {
+          // The tightest point along the local stretch limits the flow
+          let capacity = Infinity
+          for (let k = 0; k < 11; k++) {
             const si = segIdx - 5 + k
-            return si >= 0 && si < segmentCapacities.length ? segmentCapacities[si] : 0
-          }))
+            if (si >= 0 && si < segmentCapacities.length) {
+              capacity = Math.min(capacity, segmentCapacities[si])
+            }
+          }
+          if (!isFinite(capacity)) capacity = 1
+          capacity = Math.max(1, capacity)
           const densityFactor = computeDensityFactor(localCount, capacity)
 
           // Fatigue
@@ -272,13 +293,14 @@ async function runSimulation(config: SimConfig): Promise<void> {
             fog: weather.fog,
           })
 
-          // Terrain technicality factor (slope-based proxy)
+          // Terrain technicality factor (slope-based proxy × placed constraints)
           const absSlope = Math.abs(slopePct)
-          const terrainFactor = absSlope > 30
+          const slopeTerrain = absSlope > 30
             ? 0.5 + (1 - runner.techSkill) * 0.2
             : absSlope > 15
             ? 0.7 + runner.techSkill * 0.15
             : 1.0
+          const terrainFactor = slopeTerrain * (techMult[segIdx] ?? 1)
 
           // Speed in km/h
           const speed = computeSpeed(
@@ -361,7 +383,6 @@ async function runSimulation(config: SimConfig): Promise<void> {
     // A bouchon = >=10 runners simultaneously slowed by congestion on a
     // non-overtakable section. Density gives the group size; congestion gives
     // whether they are actually stuck.
-    const JAM_RUNNERS = 10
     const riskMap: RiskMapEntry[] = []
     for (const { race, nBins, binToSeg } of raceMeta) {
       const densityArr = densityAccum.get(race.id)!

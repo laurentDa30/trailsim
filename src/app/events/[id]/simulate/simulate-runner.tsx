@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useSimulation } from '@/hooks/use-simulation'
-import type { RunnerProfile, SimConfig } from '@/engine/types'
+import type { RunnerProfile, SimConfig, GPXPoint } from '@/engine/types'
 
 interface SimulateRunnerProps {
   event: { id: string; name: string; location?: string | null }
@@ -19,6 +19,7 @@ interface SimulateRunnerProps {
     rain: boolean
     rainIntensity: number
     fog: boolean
+    jamThreshold: number
     runnerProfiles: RunnerProfile[]
   }
   races: {
@@ -27,6 +28,7 @@ interface SimulateRunnerProps {
     color: string
     gpxPoints: string
     startTime: number
+    segments: { indexStart: number; width: number; techLevel: number }[]
   }[]
 }
 
@@ -92,22 +94,32 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
 
     const config: SimConfig = {
       simulationId: simulation.id,
-      races: races.map((r) => ({
-        id: r.id,
-        name: r.name,
-        color: r.color,
-        // startTime is stored in minutes (T+30 min); the engine works in seconds.
-        startOffset: r.startTime * 60,
-        totalRunners: runnersPerRace,
-        gpxPoints: (() => {
+      races: races.map((r) => {
+        const gpxPoints: GPXPoint[] = (() => {
           try {
-            return JSON.parse(r.gpxPoints)
+            return JSON.parse(r.gpxPoints) as GPXPoint[]
           } catch {
             return []
           }
-        })(),
-        profiles: profilesPerRace,
-      })),
+        })()
+        return {
+          id: r.id,
+          name: r.name,
+          color: r.color,
+          // startTime is stored in minutes (T+30 min); the engine works in seconds.
+          startOffset: r.startTime * 60,
+          totalRunners: runnersPerRace,
+          gpxPoints,
+          profiles: profilesPerRace,
+          // Map placed narrow/technical sections to engine constraints
+          constraints: r.segments.map((s) => ({
+            dist: gpxPoints[s.indexStart]?.dist ?? 0,
+            widthRatio: s.width,
+            techLevel: s.techLevel,
+            influenceKm: 0.2,
+          })),
+        }
+      }),
       weather: {
         temperature: simulation.temperature,
         wind: simulation.wind,
@@ -119,6 +131,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
       },
       stepSeconds: 60,
       nRuns: 100,
+      jamThreshold: simulation.jamThreshold,
     }
 
     run(config, LOG_LINES)

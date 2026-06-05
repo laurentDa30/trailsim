@@ -7,20 +7,24 @@ import { Button } from '@/components/ui/button'
 import { Step1Courses, type Resources } from './step1-courses'
 import { Step2Peloton, type PelotonData } from './step2-peloton'
 import { Step3Conditions, type WeatherData } from './step3-conditions'
-import type { Race, Simulation } from '@prisma/client'
+import { Step4Constraints } from './step4-constraints'
+import type { Race, Segment, Simulation } from '@prisma/client'
 import { useRouter } from 'next/navigation'
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3 | 4
 
 const STEPS = [
   { n: 1 as const, label: 'Courses & tracés' },
   { n: 2 as const, label: 'Peloton' },
   { n: 3 as const, label: 'Conditions' },
+  { n: 4 as const, label: 'Points sensibles' },
 ]
+
+type RaceWithSegments = Race & { segments: Segment[] }
 
 interface SetupWizardProps {
   event: { id: string; name: string }
-  races: Race[]
+  races: RaceWithSegments[]
   simulation: Simulation | null
 }
 
@@ -49,6 +53,8 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
     return { effectif: 45, barrieres: 20 }
   })
 
+  const [jamThreshold, setJamThreshold] = useState<number>(simulation?.jamThreshold ?? 10)
+
   const pelotonRef = useRef<PelotonData | null>(null)
   const weatherRef = useRef<WeatherData>({
     temperature: simulation?.temperature ?? 18,
@@ -60,7 +66,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   })
 
   function handleNext() {
-    if (step < 3) setStep((s) => (s + 1) as Step)
+    if (step < 4) setStep((s) => (s + 1) as Step)
   }
 
   function handlePrev() {
@@ -113,6 +119,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           rain: weather.rain,
           rainIntensity: weather.rainIntensity,
           fog: weather.fog,
+          jamThreshold,
           runnerProfiles: peloton.profiles,
           ressources: JSON.stringify({
             effectifTotal: resources.effectif,
@@ -195,7 +202,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
             <Step1Courses
               eventId={event.id}
               races={races}
-              onUpdate={setRaces}
+              onUpdate={(rs) => setRaces(rs as RaceWithSegments[])}
               resources={resources}
               onResourcesChange={setResources}
             />
@@ -214,6 +221,14 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               races={races}
               simulation={simulation}
               onUpdate={(w) => { weatherRef.current = w }}
+            />
+          )}
+          {step === 4 && (
+            <Step4Constraints
+              eventId={event.id}
+              races={races}
+              jamThreshold={jamThreshold}
+              onJamThresholdChange={setJamThreshold}
             />
           )}
         </div>
@@ -246,10 +261,10 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           </Button>
 
           <span className="text-[var(--color-ink-4)] text-sm">
-            Étape {step} sur 3
+            Étape {step} sur 4
           </span>
 
-          {step < 3 ? (
+          {step < 4 ? (
             <Button variant="primary" onClick={handleNext} className="gap-1.5">
               Suivant
               <ChevronRightIcon size={16} />

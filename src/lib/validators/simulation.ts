@@ -26,6 +26,7 @@ export const SimulationCreateSchema = z.object({
   rain: z.boolean().default(false),
   rainIntensity: z.number().min(0).max(100).default(0),
   fog: z.boolean().default(false),
+  jamThreshold: z.number().int().min(2).max(100).default(10),
   ressources: z.string().optional(),
   runnerProfiles: z.array(RunnerProfileSchema).min(1, "At least one runner profile is required"),
 })

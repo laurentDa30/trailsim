@@ -14,6 +14,7 @@ export default async function SimulatePage({ params }: PageProps) {
     include: {
       races: {
         orderBy: { startTime: 'asc' },
+        include: { segments: true },
       },
       simulations: {
         orderBy: { createdAt: 'desc' },
@@ -41,6 +42,11 @@ export default async function SimulatePage({ params }: PageProps) {
     color: r.color,
     gpxPoints: r.gpxPoints,
     startTime: r.startTime,
+    segments: r.segments.map((s) => ({
+      indexStart: s.indexStart,
+      width: s.width,
+      techLevel: s.techLevel,
+    })),
   }))
 
   const sim = {
@@ -53,6 +59,7 @@ export default async function SimulatePage({ params }: PageProps) {
     rain: simulation.rain,
     rainIntensity: simulation.rainIntensity,
     fog: simulation.fog,
+    jamThreshold: simulation.jamThreshold,
     runnerProfiles: simulation.runnerProfiles,
   }
 

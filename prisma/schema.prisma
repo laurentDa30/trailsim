@@ -108,6 +108,7 @@ model Simulation {
   rain           Boolean         @default(false)
   rainIntensity  Float           @default(0.0)
   fog            Boolean         @default(false)
+  jamThreshold   Int             @default(10)
   resultSnapshot String?
   riskMap        String?
   logistique     String          @default("[]")

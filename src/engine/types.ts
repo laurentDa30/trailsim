@@ -45,6 +45,13 @@ export interface RunnerState {
   atRavito: number      // seconds remaining at ravito stop
 }
 
+export interface Constraint {
+  dist: number          // km along the track where the section is centred
+  widthRatio: number    // 0-1, lower = narrower = lower capacity
+  techLevel: number     // 0-5, technical slowdown
+  influenceKm: number   // length of the constrained stretch
+}
+
 export interface RaceConfig {
   id: string
   name: string
@@ -53,6 +60,7 @@ export interface RaceConfig {
   totalRunners: number
   gpxPoints: GPXPoint[]
   profiles: RunnerProfile[]
+  constraints?: Constraint[]
 }
 
 export interface SimConfig {
@@ -68,6 +76,7 @@ export interface SimConfig {
   }
   stepSeconds: number
   nRuns: number
+  jamThreshold?: number  // runners that make a bouchon (default 10)
 }
 
 export interface RiskMapEntry {
