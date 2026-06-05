@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   description: "Trail race simulation and logistics planning tool",
 }
 
+// Applied before paint to avoid a theme flash
+const themeScript = `(function(){try{var t=localStorage.getItem('trailsim:theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();`
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -20,6 +23,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" data-theme="dark" className={`${inter.variable} h-full`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full flex flex-col antialiased">{children}</body>
     </html>
   )

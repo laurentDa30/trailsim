@@ -8,6 +8,7 @@ import { Step1Courses, type Resources } from './step1-courses'
 import { Step2Peloton, type PelotonData } from './step2-peloton'
 import { Step3Conditions, type WeatherData } from './step3-conditions'
 import { Step4Constraints } from './step4-constraints'
+import { Topbar } from '@/components/layout/topbar'
 import type { Race, Segment, Simulation } from '@prisma/client'
 import { useRouter } from 'next/navigation'
 
@@ -144,16 +145,12 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
-      {/* Header */}
-      <header className="border-b border-[var(--color-line)] bg-[var(--color-bg-1)]">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-4">
-          <a href="/dashboard" className="text-[var(--color-ink-3)] text-sm hover:text-[var(--color-ink)] transition-colors">TrailSim</a>
-          <span className="text-[var(--color-line)]">/</span>
-          <a href="/dashboard" className="text-[var(--color-ink-2)] text-sm hover:text-[var(--color-ink)] transition-colors">{event.name}</a>
-          <span className="text-[var(--color-line)]">/</span>
-          <span className="text-[var(--color-ink)] text-sm font-medium">Configuration</span>
-        </div>
-      </header>
+      <Topbar
+        activePage="config"
+        eventId={event.id}
+        eventName={event.name}
+        status="config"
+      />
 
       {/* Stepper */}
       <div className="border-b border-[var(--color-line)] bg-[var(--color-bg-1)]">

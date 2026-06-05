@@ -1,44 +1,56 @@
 'use client'
 
 import Link from 'next/link'
-import { Settings } from 'lucide-react'
+import { FileTextIcon, Share2Icon } from 'lucide-react'
 import { PageNav } from './page-nav'
-import { cn } from '@/lib/utils'
+import { ThemeToggle } from './theme-toggle'
+
+type StatusKey = 'config' | 'sim' | 'results'
 
 interface TopbarProps {
+  activePage: 'dashboard' | 'config' | 'simulate' | 'results'
+  eventId?: string
   eventName?: string
   eventDate?: string
   eventLocation?: string
-  activePage: 'dashboard' | 'config' | 'simulate' | 'results'
-  eventId?: string
+  status?: StatusKey
+  exportHref?: string
+  userInitials?: string
+}
+
+const STATUS: Record<
+  StatusKey,
+  { label: string; color: string; tinted: boolean; pulse: boolean }
+> = {
+  config: { label: 'Configuration en cours', color: 'var(--color-ink-3)', tinted: false, pulse: false },
+  sim: { label: 'Simulation en cours', color: 'var(--color-warning)', tinted: true, pulse: true },
+  results: { label: 'Résultats disponibles', color: 'var(--color-safe)', tinted: true, pulse: true },
 }
 
 export function Topbar({
+  activePage,
+  eventId,
   eventName,
   eventDate,
   eventLocation,
-  activePage,
-  eventId,
+  status,
+  exportHref,
+  userInitials = 'OR',
 }: TopbarProps) {
+  const st = status ? STATUS[status] : null
+
   return (
     <header
-      className={cn(
-        'fixed top-0 z-50 w-full h-[52px]',
-        'bg-[var(--color-bg-1)] border-b border-[var(--color-line)]',
-        'flex items-center px-4 gap-4'
-      )}
+      className="flex items-center gap-3 px-4 shrink-0"
+      style={{
+        height: 52,
+        background: 'var(--color-bg-1)',
+        borderBottom: '1px solid var(--color-line)',
+      }}
     >
       {/* Brand */}
-      <Link href="/dashboard" className="flex items-center gap-2 flex-shrink-0">
-        {/* SVG altimetry icon */}
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 22 22"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
+      <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
           <polyline
             points="1,16 6,8 10,13 14,5 18,9 21,6"
             stroke="var(--color-lime)"
@@ -48,58 +60,105 @@ export function Topbar({
             fill="none"
           />
         </svg>
-        <span className="text-sm font-semibold text-[var(--color-ink)] tracking-tight">
-          Trail<b className="text-[var(--color-lime)]">Sim</b>
+        <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--color-ink)' }}>
+          Trail<b style={{ color: 'var(--color-lime)', fontWeight: 700 }}>Sim</b>
         </span>
       </Link>
 
       {/* Event info */}
       {eventName && (
-        <div className="flex flex-col justify-center min-w-0 flex-shrink">
-          <span className="text-xs font-medium text-[var(--color-ink-2)] truncate leading-tight">
+        <div
+          className="flex flex-col justify-center min-w-0 pl-3.5 ml-1"
+          style={{ borderLeft: '1px solid var(--color-line)' }}
+        >
+          <span className="text-[13px] font-semibold truncate leading-tight" style={{ color: 'var(--color-ink)' }}>
             {eventName}
           </span>
           {(eventDate || eventLocation) && (
-            <span className="text-[10px] text-[var(--color-ink-4)] truncate leading-tight">
+            <span className="text-[11px] truncate leading-tight" style={{ color: 'var(--color-ink-3)' }}>
               {[eventDate, eventLocation].filter(Boolean).join(' · ')}
             </span>
           )}
         </div>
       )}
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Page nav */}
+      {/* Centered page navigation */}
       <PageNav activePage={activePage} eventId={eventId} />
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Right actions */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <button
-          className={cn(
-            'w-8 h-8 rounded-md flex items-center justify-center',
-            'text-[var(--color-ink-3)] hover:text-[var(--color-ink)]',
-            'hover:bg-[var(--color-bg-2)] transition-all duration-150'
-          )}
-          aria-label="Tweaks"
+      {/* Status pill */}
+      {st && (
+        <span
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs shrink-0"
+          style={{
+            color: st.color,
+            background: st.tinted
+              ? `color-mix(in oklab, ${st.color} 14%, transparent)`
+              : 'var(--color-bg-2)',
+            border: `1px solid ${
+              st.tinted ? `color-mix(in oklab, ${st.color} 30%, transparent)` : 'var(--color-line)'
+            }`,
+          }}
         >
-          <Settings size={15} />
-        </button>
+          <span
+            className={st.pulse ? 'ts-pulse-dot' : ''}
+            style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }}
+          />
+          {st.label}
+        </span>
+      )}
 
-        {/* User avatar */}
-        <div
-          className={cn(
-            'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0',
-            'bg-[var(--color-forest)] border border-[var(--color-lime)]/30',
-            'text-[10px] font-semibold text-[var(--color-lime)]'
-          )}
-          aria-label="User menu"
+      {/* Export PDF */}
+      {exportHref && (
+        <Link
+          href={exportHref}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0"
+          style={{
+            background: 'var(--color-bg-2)',
+            border: '1px solid var(--color-line)',
+            color: 'var(--color-ink-2)',
+          }}
         >
-          OR
-        </div>
+          <FileTextIcon size={13} />
+          <span className="hidden sm:inline">Export PDF</span>
+        </Link>
+      )}
+
+      <ThemeToggle />
+
+      {/* Share */}
+      <button
+        type="button"
+        aria-label="Partager"
+        className="flex items-center justify-center transition-colors shrink-0"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: 'var(--color-bg-2)',
+          border: '1px solid var(--color-line)',
+          color: 'var(--color-ink-3)',
+        }}
+      >
+        <Share2Icon size={15} />
+      </button>
+
+      {/* Avatar */}
+      <div
+        className="flex items-center justify-center shrink-0 text-[11px] font-bold"
+        style={{
+          width: 30,
+          height: 30,
+          borderRadius: '50%',
+          background: 'color-mix(in oklab, var(--color-lime) 20%, var(--color-bg-2))',
+          color: 'var(--color-lime)',
+        }}
+        aria-label="Compte"
+      >
+        {userInitials}
       </div>
     </header>
   )

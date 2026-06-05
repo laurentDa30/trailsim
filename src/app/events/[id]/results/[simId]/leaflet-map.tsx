@@ -397,7 +397,7 @@ export default function LeafletMap({
 
   return (
     <>
-      <style>{`.leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }`}</style>
+      <style>{`html[data-theme="dark"] .leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }`}</style>
       <MapContainer
         center={center}
         zoom={12}

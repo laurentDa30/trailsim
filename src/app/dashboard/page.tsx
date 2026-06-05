@@ -17,6 +17,7 @@ export default async function DashboardPage() {
   const events = await db.event.findMany({
     where: { userId: session.user.id },
     include: {
+      _count: { select: { simulations: true } },
       races: {
         select: {
           id: true,
@@ -40,7 +41,8 @@ export default async function DashboardPage() {
 
   // Compute stats
   const totalRaces = events.reduce((sum, e) => sum + e.races.length, 0)
-  const totalSimulations = events.reduce((sum, e) => sum + e.simulations.length, 0)
+  // Each event only loads its latest simulation, so use the real count
+  const totalSimulations = events.reduce((sum, e) => sum + e._count.simulations, 0)
 
   // Get simulation total runners from latest simulations
   const totalSimulatedRunners = events.reduce((sum, e) => {
@@ -52,7 +54,7 @@ export default async function DashboardPage() {
     <div className="flex flex-col min-h-screen" style={{ backgroundColor: "var(--color-bg)" }}>
       <Topbar activePage="dashboard" />
 
-      <main className="flex-1 px-6 pb-8 pt-[calc(52px+2rem)] max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-6 py-8 max-w-7xl mx-auto w-full">
         {/* Page header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">

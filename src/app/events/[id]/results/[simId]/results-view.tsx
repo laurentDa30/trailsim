@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { ElevationProfile } from './elevation-profile'
 import { Timeline } from './timeline'
+import { Topbar } from '@/components/layout/topbar'
 import {
   LOGI_TYPES,
   logiStorageKey,
@@ -12,8 +12,6 @@ import {
   type PlacedLogi,
 } from './logistics'
 import {
-  ArrowLeftIcon,
-  FileTextIcon,
   MapIcon,
   AlertTriangleIcon,
   ZapIcon,
@@ -29,7 +27,6 @@ import {
   XIcon,
   LayersIcon,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { RiskBadge } from '@/components/layout/risk-badge'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
 
@@ -475,67 +472,17 @@ export function ResultsView({
   return (
     <div
       className="flex flex-col"
-      style={{
-        height: '100vh',
-        background: 'var(--color-bg)',
-        color: 'var(--color-ink)',
-        '--color-bg': '#14110f',
-        '--color-bg-1': '#1a1714',
-        '--color-bg-2': '#222019',
-        '--color-line': '#2a2824',
-        '--color-ink': '#f5f4f0',
-        '--color-ink-2': '#c8c4bc',
-        '--color-ink-3': '#8a8680',
-        '--color-ink-4': '#555250',
-        '--color-lime': '#7CB518',
-        '--color-danger': '#DC2626',
-        '--color-warning': '#D97706',
-        '--color-safe': '#16A34A',
-      } as React.CSSProperties}
+      style={{ height: '100vh', background: 'var(--color-bg)', color: 'var(--color-ink)' }}
     >
       {/* Topbar */}
-      <header
-        className="flex items-center gap-4 px-5 border-b shrink-0"
-        style={{
-          height: 52,
-          background: 'var(--color-bg-1)',
-          borderColor: 'var(--color-line)',
-        }}
-      >
-        {/* Brand */}
-        <div className="flex items-center gap-2 mr-2">
-          <ZapIcon size={16} style={{ color: 'var(--color-lime)' }} />
-          <span
-            className="text-sm font-bold tracking-tight"
-            style={{ color: 'var(--color-ink)' }}
-          >
-            TrailSim
-          </span>
-        </div>
-
-        <span
-          className="text-sm font-medium truncate max-w-[220px]"
-          style={{ color: 'var(--color-ink-2)' }}
-        >
-          {event.name}
-        </span>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Link href={`/events/${event.id}/setup`}>
-            <Button variant="ghost" size="sm" className="gap-1.5">
-              <ArrowLeftIcon size={13} />
-              Configuration
-            </Button>
-          </Link>
-
-          <Link href={`/events/${event.id}/report/${simulation.id}`}>
-            <Button variant="primary" size="sm" className="gap-1.5">
-              <FileTextIcon size={13} />
-              Export PDF
-            </Button>
-          </Link>
-        </div>
-      </header>
+      <Topbar
+        activePage="results"
+        eventId={event.id}
+        eventName={event.name}
+        eventLocation={event.location ?? undefined}
+        status="results"
+        exportHref={`/events/${event.id}/report/${simulation.id}`}
+      />
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
