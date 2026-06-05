@@ -44,6 +44,12 @@ async function runSimulation(config: SimConfig): Promise<void> {
       return
     }
 
+    // Density is binned by fixed distance (not per GPX point): a dense track
+    // has a point every ~20 m, so per-point counts are almost always ~1 runner.
+    // 150 m bins reflect actual crowding / groups.
+    const DENSITY_BIN_M = 150
+    const DENSITY_BIN_KM = DENSITY_BIN_M / 1000
+
     // Pre-compute race metadata
     const raceMeta = races.map((race) => {
       const pts = race.gpxPoints
@@ -64,7 +70,17 @@ async function runSimulation(config: SimConfig): Promise<void> {
       if (pts.length > 1) segmentCapacities.push(segmentCapacities[segmentCapacities.length - 1])
       else segmentCapacities.push(1)
 
-      return { race, totalDist, totalElevGain, segmentCapacities }
+      // Distance bins for density, and the representative GPX point per bin
+      const nBins = Math.max(1, Math.ceil(totalDist / DENSITY_BIN_KM))
+      const binToSeg: number[] = new Array(nBins)
+      let segPtr = 0
+      for (let b = 0; b < nBins; b++) {
+        const centerDist = (b + 0.5) * DENSITY_BIN_KM
+        while (segPtr < pts.length - 1 && pts[segPtr].dist < centerDist) segPtr++
+        binToSeg[b] = Math.min(pts.length - 1, segPtr)
+      }
+
+      return { race, totalDist, totalElevGain, segmentCapacities, nBins, binToSeg }
     })
 
     // Determine global time range across all runs
@@ -82,12 +98,11 @@ async function runSimulation(config: SimConfig): Promise<void> {
     const nTimestamps = globalTimestamps.length
 
     // Accumulation buffers for averaging across runs
-    // raceId → segmentIndex → array of density values per timestep
+    // raceId → distanceBinIndex → array of density values per timestep
     const densityAccum: Map<string, Float32Array[]> = new Map()
-    for (const { race } of raceMeta) {
-      const nSegs = race.gpxPoints.length
-      const segs: Float32Array[] = Array.from({ length: nSegs }, () => new Float32Array(nTimestamps))
-      densityAccum.set(race.id, segs)
+    for (const { race, nBins } of raceMeta) {
+      const bins: Float32Array[] = Array.from({ length: nBins }, () => new Float32Array(nTimestamps))
+      densityAccum.set(race.id, bins)
     }
 
     // For the last run, capture runner trajectories for output
@@ -301,10 +316,14 @@ async function runSimulation(config: SimConfig): Promise<void> {
             lastRunTrajectories.get(runner.id)![tIdx] = state.position
           }
 
-          // Accumulate density
+          // Accumulate density into the runner's current distance bin
           const densityArr = densityAccum.get(race.id)
-          if (densityArr && segIdx < densityArr.length) {
-            densityArr[segIdx][tIdx] += 1
+          if (densityArr && densityArr.length > 0) {
+            const binIdx = Math.min(
+              densityArr.length - 1,
+              Math.max(0, Math.floor(state.distanceDone / DENSITY_BIN_KM))
+            )
+            densityArr[binIdx][tIdx] += 1
           }
         }
       } // end timestep loop
@@ -323,28 +342,26 @@ async function runSimulation(config: SimConfig): Promise<void> {
     // Aggregate risk map
     // ---------------------------------------------------------------------------
     const riskMap: RiskMapEntry[] = []
-    for (const { race } of raceMeta) {
+    for (const { race, nBins, binToSeg } of raceMeta) {
       const densityArr = densityAccum.get(race.id)!
-      const nSegs = race.gpxPoints.length
-      for (let si = 0; si < nSegs; si++) {
-        const segDensity = densityArr[si]
+      for (let b = 0; b < nBins; b++) {
+        const binDensity = densityArr[b]
         let peakDensity = 0
-        let totalDensity = 0
         let jamCount = 0
         for (let tIdx = 0; tIdx < nTimestamps; tIdx++) {
-          const d = segDensity[tIdx] / nRuns // average across runs
-          totalDensity += d
+          const d = binDensity[tIdx] / nRuns // average runners per 150 m bin
           if (d > peakDensity) peakDensity = d
-          if (d > 5) jamCount++ // >5 runners/step = potential jam
+          if (d > 8) jamCount++ // >8 runners in 150 m = potential jam
         }
-        if (peakDensity < 0.5) continue // skip empty segments
+        if (peakDensity < 1) continue // skip near-empty bins
 
         const jamProbability = nTimestamps > 0 ? jamCount / nTimestamps : 0
-        const riskScore = Math.min(1.0, (peakDensity / 20) * 0.6 + jamProbability * 0.4)
+        // Normalise peak against ~25 runners in a 150 m bin (a real bottleneck)
+        const riskScore = Math.min(1.0, (peakDensity / 25) * 0.6 + jamProbability * 0.4)
 
         riskMap.push({
           raceId: race.id,
-          segmentIndex: si,
+          segmentIndex: binToSeg[b],
           riskScore,
           jamProbability,
           peakDensity,
@@ -357,11 +374,13 @@ async function runSimulation(config: SimConfig): Promise<void> {
     // ---------------------------------------------------------------------------
     const collisionWindows: CompressedSimulationResult["collisionWindows"] = []
 
-    // Check spatial proximity between races
+    // Check spatial proximity between races, bin by bin
     for (let ri = 0; ri < raceMeta.length; ri++) {
       for (let rj = ri + 1; rj < raceMeta.length; rj++) {
-        const raceA = raceMeta[ri].race
-        const raceB = raceMeta[rj].race
+        const metaA = raceMeta[ri]
+        const metaB = raceMeta[rj]
+        const raceA = metaA.race
+        const raceB = metaB.race
         const ptsA = raceA.gpxPoints
         const ptsB = raceB.gpxPoints
 
@@ -370,38 +389,32 @@ async function runSimulation(config: SimConfig): Promise<void> {
         const densA = densityAccum.get(raceA.id)!
         const densB = densityAccum.get(raceB.id)!
 
-        // Find segments where both races have density at the same time
-        const nSegsA = ptsA.length
-        for (let si = 0; si < nSegsA; si++) {
-          // Find nearest segment in race B
-          const ptA = ptsA[si]
-          let nearestBIdx = -1
-          let minDist = 0.05 // max 50m proximity (in km)
-          for (let sj = 0; sj < ptsB.length; sj++) {
-            const ptB = ptsB[sj]
-            const d = Math.sqrt(
-              (ptA.lat - ptB.lat) ** 2 + (ptA.lng - ptB.lng) ** 2
-            ) * 111 // rough km conversion
-            if (d < minDist) { minDist = d; nearestBIdx = sj }
+        for (let bA = 0; bA < metaA.nBins; bA++) {
+          // Representative point for this bin of A
+          const ptA = ptsA[metaA.binToSeg[bA]]
+          // Find the nearest bin of B (within ~80 m) via its representative point
+          let nearestBBin = -1
+          let minDist = 0.08 // km
+          for (let bB = 0; bB < metaB.nBins; bB++) {
+            const ptB = ptsB[metaB.binToSeg[bB]]
+            const d =
+              Math.sqrt((ptA.lat - ptB.lat) ** 2 + (ptA.lng - ptB.lng) ** 2) * 111
+            if (d < minDist) { minDist = d; nearestBBin = bB }
           }
+          if (nearestBBin < 0) continue
 
-          if (nearestBIdx < 0) continue
-
-          // Skip the start area: each race starts with its own wave offset, so
-          // overlap near both start lines is just the staggered départ, not a
-          // genuine catch-up between courses. Require both to be past ~0.6 km.
-          const distA = ptsA[si].dist
-          const distB = ptsB[nearestBIdx].dist
+          // Skip the start area (staggered départs aren't a catch-up)
+          const distA = ptA.dist
+          const distB = ptsB[metaB.binToSeg[nearestBBin]].dist
           if (distA < 0.6 && distB < 0.6) continue
 
-          // Check for temporal overlap
+          // Temporal overlap of both fields in this shared location
           let windowStart = -1
           let windowEnd = -1
           let peakOverlap = 0
-
           for (let tIdx = 0; tIdx < nTimestamps; tIdx++) {
-            const dA = densA[si][tIdx] / nRuns
-            const dB = densB[nearestBIdx][tIdx] / nRuns
+            const dA = densA[bA][tIdx] / nRuns
+            const dB = densB[nearestBBin][tIdx] / nRuns
             if (dA > 0.5 && dB > 0.5) {
               if (windowStart < 0) windowStart = globalTimestamps[tIdx]
               windowEnd = globalTimestamps[tIdx]
@@ -412,7 +425,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
           if (windowStart >= 0 && peakOverlap > 1) {
             collisionWindows.push({
               raceIds: [raceA.id, raceB.id],
-              segmentIndex: si,
+              segmentIndex: metaA.binToSeg[bA],
               tStart: windowStart,
               tEnd: windowEnd,
               peak: peakOverlap,
