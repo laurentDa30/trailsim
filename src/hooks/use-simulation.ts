@@ -68,7 +68,7 @@ export function useSimulation() {
           result,
           zonesDetected: result.riskMap?.length ?? 0,
           runnersSimulated: result.runnersData?.length ?? 0,
-          precision: 94.2,
+          precision: 90.0,
         }
       }
     } catch { /* ignore */ }
@@ -142,7 +142,8 @@ export function useSimulation() {
           logs: newLogs.length > 0 ? [...prev.logs, ...newLogs] : prev.logs,
           zonesDetected: Math.floor(progressFrac * 12),
           runnersSimulated: Math.floor(totalRunners * progressFrac),
-          precision: parseFloat(Math.min(94.2, 40 + progressFrac * 54.2).toFixed(1)),
+          // Monte-Carlo precision ≈ 1 − 1/√(runs done): tightens as runs accrue
+          precision: parseFloat(((1 - 1 / Math.sqrt(Math.max(1, msg.run))) * 100).toFixed(1)),
           estimatedSecondsLeft: remaining,
         }))
       }
@@ -167,7 +168,7 @@ export function useSimulation() {
           result,
           zonesDetected: result.riskMap?.length ?? 12,
           runnersSimulated: totalRunners,
-          precision: 94.2,
+          precision: parseFloat(((1 - 1 / Math.sqrt(Math.max(1, prev.totalRuns))) * 100).toFixed(1)),
           estimatedSecondsLeft: 0,
           error: null,
         }))

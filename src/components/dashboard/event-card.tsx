@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Calendar, MapPin, Settings, Play, BarChart2, Users } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Calendar, MapPin, Settings, Play, BarChart2, Users, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type SimulationStatus = "PENDING" | "RUNNING" | "DONE" | "ERROR"
@@ -199,7 +200,18 @@ export function EventCard({
   totalRunners,
   latestSimulation,
 }: EventCardProps) {
+  const router = useRouter()
   const simStatus: SimulationStatus = latestSimulation?.status ?? "PENDING"
+
+  async function handleDelete() {
+    if (!confirm(`Supprimer l'événement « ${name} » et toutes ses simulations ? Cette action est irréversible.`)) return
+    try {
+      await fetch(`/api/events/${id}`, { method: "DELETE" })
+      router.refresh()
+    } catch {
+      /* ignore */
+    }
+  }
 
   const formattedDate = date
     ? new Date(date).toLocaleDateString("fr-FR", {
@@ -229,6 +241,15 @@ export function EventCard({
           {name}
         </h3>
         <StatusBadge status={simStatus} />
+        <button
+          onClick={handleDelete}
+          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--color-bg-2)]"
+          style={{ color: "var(--color-ink-4)" }}
+          title="Supprimer l'événement"
+          aria-label="Supprimer l'événement"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
 
       {/* Meta */}

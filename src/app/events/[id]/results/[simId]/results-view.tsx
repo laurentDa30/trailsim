@@ -569,6 +569,11 @@ export function ResultsView({
               <LayerSwitch label="Heatmap" on={layers.heat} onClick={() => setLayer('heat', !layers.heat)} />
               <LayerSwitch label="Logistique" on={layers.logistique} onClick={() => setLayer('logistique', !layers.logistique)} />
             </div>
+            <p className="px-3 pb-3 -mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--color-ink-4)' }}>
+              <b style={{ color: 'var(--color-ink-3)' }}>Densité live</b> = affluence à l&apos;instant
+              de la timeline (évolue quand vous jouez). <b style={{ color: 'var(--color-ink-3)' }}>Heatmap</b> =
+              points chauds cumulés sur toute la course (vue d&apos;ensemble figée).
+            </p>
           </Section>
 
           {/* STATISTIQUES section */}
@@ -752,57 +757,88 @@ export function ResultsView({
             </div>
           </Section>
 
-          {/* COLLISIONS section */}
+          {/* COLLISIONS / RENCONTRES section */}
           <Section
             icon={<ZapIcon size={12} />}
-            label="Collisions"
+            label="Rencontres inter-courses"
             count={collisionWindows.length}
           >
-            <div className="p-3 flex flex-col gap-1">
-              {collisionWindows.length === 0 && (
+            <div className="p-3 flex flex-col gap-2">
+              <p className="text-[11px] leading-relaxed px-0.5" style={{ color: 'var(--color-ink-4)' }}>
+                Moments où le peloton d&apos;une course en rejoint un autre sur un tronçon commun —
+                p. ex. les premiers d&apos;une course partie en différé rattrapant les derniers de la
+                précédente (le départ est exclu).
+              </p>
+
+              {races.length < 2 && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
-                  Aucune fenêtre de collision détectée.
+                  Une seule course : pas de rencontre inter-courses possible. Les engorgements
+                  internes apparaissent dans « Zones à risque ».
                 </p>
               )}
+              {races.length >= 2 && collisionWindows.length === 0 && (
+                <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
+                  Aucune rencontre détectée : les courses ne se superposent pas, ou jamais en même
+                  temps.
+                </p>
+              )}
+
               {collisionWindows.map((cw, i) => {
-                const raceNames = cw.raceIds
-                  .map((rid) => races.find((r) => r.id === rid)?.name ?? rid)
-                  .join(' × ')
+                const resolved = cw.raceIds.map(
+                  (rid) => races.find((r) => r.id === rid) ?? null
+                )
+                const ptRace = resolved[0]
+                const dist = ptRace?.gpxPoints[cw.segmentIndex]?.dist
                 return (
                   <div
                     key={i}
-                    className="flex flex-col gap-1 px-3 py-2.5 rounded-lg"
-                    style={{
-                      background: 'var(--color-bg-2)',
-                      border: '1px solid var(--color-line)',
-                    }}
+                    className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg"
+                    style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium truncate" style={{ color: 'var(--color-ink-2)' }}>
-                        {raceNames}
-                      </span>
-                      <span
-                        className="text-xs font-mono ml-2 shrink-0"
-                        style={{
-                          color: cw.peak >= 0.8 ? 'var(--color-danger)' : 'var(--color-warning)',
-                        }}
-                      >
-                        pic {Math.round(cw.peak * 100)}
-                      </span>
+                    {/* Which courses meet */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {resolved.map((r, j) => (
+                        <span key={j} className="flex items-center gap-1">
+                          {j > 0 && (
+                            <span className="text-[10px]" style={{ color: 'var(--color-ink-4)' }}>
+                              ↔
+                            </span>
+                          )}
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ background: r?.color ?? 'var(--color-ink-4)' }}
+                          />
+                          <span className="text-xs font-medium" style={{ color: 'var(--color-ink-2)' }}>
+                            {r?.name ?? 'Course supprimée'}
+                          </span>
+                        </span>
+                      ))}
                     </div>
+
+                    {/* When */}
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono" style={{ color: 'var(--color-ink-3)' }}>
+                      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+                        Contact
+                      </span>
+                      <span className="text-xs font-mono" style={{ color: 'var(--color-ink-2)' }}>
                         {formatTimeHHMM(cw.tStart)}
                       </span>
                       <span style={{ color: 'var(--color-ink-4)' }}>→</span>
                       <span className="text-xs font-mono" style={{ color: 'var(--color-ink-3)' }}>
                         {formatTimeHHMM(cw.tEnd)}
                       </span>
+                    </div>
+
+                    {/* Where + intensity */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
+                        {dist != null ? `km ${dist.toFixed(1)}` : `segment ${cw.segmentIndex}`}
+                      </span>
                       <span
-                        className="ml-auto text-xs font-mono"
-                        style={{ color: 'var(--color-ink-4)' }}
+                        className="text-[11px] font-mono"
+                        style={{ color: cw.peak >= 25 ? 'var(--color-danger)' : 'var(--color-warning)' }}
                       >
-                        seg {cw.segmentIndex}
+                        jusqu&apos;à {Math.round(cw.peak)} coureurs
                       </span>
                     </div>
                   </div>

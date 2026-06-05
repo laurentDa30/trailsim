@@ -321,7 +321,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
                 <StatRow label="Coureurs simulés" value={String(state.runnersSimulated)} />
                 <StatRow label="Zones détectées" value={String(state.zonesDetected)} />
                 <StatRow
-                  label="Précision"
+                  label="Convergence"
                   value={`${state.precision}%`}
                   highlight={isDone}
                 />

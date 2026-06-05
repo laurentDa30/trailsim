@@ -24,7 +24,7 @@ const STEPS = [
 type RaceWithSegments = Race & { segments: Segment[] }
 
 interface SetupWizardProps {
-  event: { id: string; name: string }
+  event: { id: string; name: string; location?: string | null }
   races: RaceWithSegments[]
   simulation: Simulation | null
 }
@@ -149,6 +149,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
         activePage="config"
         eventId={event.id}
         eventName={event.name}
+        eventLocation={event.location ?? undefined}
         status="config"
       />
 

@@ -9,6 +9,7 @@ import {
   TrendingUpIcon,
   LoaderIcon,
   CheckIcon,
+  Trash2Icon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -147,6 +148,18 @@ export function Step1Courses({
     }
   }
 
+  async function handleDeleteRace(raceId: string) {
+    if (!confirm('Supprimer cette course et son tracé ?')) return
+    const updated = localRaces.filter((r) => r.id !== raceId)
+    setLocalRaces(updated)
+    onUpdate(updated)
+    try {
+      await fetch(`/api/events/${eventId}/races/${raceId}`, { method: 'DELETE' })
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function handleGpxUpload(raceId: string, file: File) {
     setGpxStates((s) => ({ ...s, [raceId]: { status: 'uploading' } }))
     try {
@@ -218,6 +231,16 @@ export function Step1Courses({
                     />
                   ))}
                 </div>
+
+                {/* Delete course */}
+                <button
+                  onClick={() => handleDeleteRace(race.id)}
+                  className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-ink-4)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-2)] transition-colors"
+                  title="Supprimer la course"
+                  aria-label="Supprimer la course"
+                >
+                  <Trash2Icon size={15} />
+                </button>
               </div>
 
               {/* Start time + badges */}

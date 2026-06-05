@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { FileTextIcon, Share2Icon } from 'lucide-react'
+import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon } from 'lucide-react'
 import { PageNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
 
@@ -65,18 +65,31 @@ export function Topbar({
         </span>
       </Link>
 
-      {/* Event info */}
+      {/* Event info — name with address beside it */}
       {eventName && (
         <div
-          className="flex flex-col justify-center min-w-0 pl-3.5 ml-1"
+          className="flex items-baseline gap-2.5 min-w-0 pl-3.5 ml-1"
           style={{ borderLeft: '1px solid var(--color-line)' }}
         >
-          <span className="text-[13px] font-semibold truncate leading-tight" style={{ color: 'var(--color-ink)' }}>
+          <span className="text-[13px] font-semibold truncate shrink-0" style={{ color: 'var(--color-ink)' }}>
             {eventName}
           </span>
-          {(eventDate || eventLocation) && (
-            <span className="text-[11px] truncate leading-tight" style={{ color: 'var(--color-ink-3)' }}>
-              {[eventDate, eventLocation].filter(Boolean).join(' · ')}
+          {eventLocation && (
+            <span
+              className="hidden md:flex items-center gap-1 text-[11.5px] truncate min-w-0"
+              style={{ color: 'var(--color-ink-3)' }}
+            >
+              <MapPinIcon size={11} style={{ color: 'var(--color-ink-4)' }} />
+              <span className="truncate">{eventLocation}</span>
+            </span>
+          )}
+          {eventDate && (
+            <span
+              className="hidden lg:flex items-center gap-1 text-[11.5px] shrink-0"
+              style={{ color: 'var(--color-ink-4)' }}
+            >
+              <CalendarIcon size={11} />
+              {eventDate}
             </span>
           )}
         </div>
