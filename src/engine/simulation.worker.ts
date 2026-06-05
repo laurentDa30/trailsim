@@ -98,12 +98,25 @@ async function runSimulation(config: SimConfig): Promise<void> {
     const nTimestamps = globalTimestamps.length
 
     // Accumulation buffers for averaging across runs
-    // raceId → distanceBinIndex → array of density values per timestep
+    // raceId → distanceBinIndex → array of values per timestep
     const densityAccum: Map<string, Float32Array[]> = new Map()
+    // Congestion = runners actually slowed by the crowd on a non-overtakable
+    // (over-capacity / narrow) section — the real ingredient of a bouchon.
+    const congestionAccum: Map<string, Float32Array[]> = new Map()
     for (const { race, nBins } of raceMeta) {
-      const bins: Float32Array[] = Array.from({ length: nBins }, () => new Float32Array(nTimestamps))
-      densityAccum.set(race.id, bins)
+      densityAccum.set(
+        race.id,
+        Array.from({ length: nBins }, () => new Float32Array(nTimestamps))
+      )
+      congestionAccum.set(
+        race.id,
+        Array.from({ length: nBins }, () => new Float32Array(nTimestamps))
+      )
     }
+
+    // A runner is "congested" when the crowd slows them below this factor
+    // (densityFactor < 1 only happens when a section is over its capacity).
+    const CONGEST_THRESHOLD = 0.95
 
     // For the last run, capture runner trajectories for output
     let lastRunTrajectories: Map<string, number[]> | null = null
@@ -316,7 +329,8 @@ async function runSimulation(config: SimConfig): Promise<void> {
             lastRunTrajectories.get(runner.id)![tIdx] = state.position
           }
 
-          // Accumulate density into the runner's current distance bin
+          // Accumulate density into the runner's current distance bin, and
+          // flag congestion when the crowd is actively slowing this runner.
           const densityArr = densityAccum.get(race.id)
           if (densityArr && densityArr.length > 0) {
             const binIdx = Math.min(
@@ -324,6 +338,9 @@ async function runSimulation(config: SimConfig): Promise<void> {
               Math.max(0, Math.floor(state.distanceDone / DENSITY_BIN_KM))
             )
             densityArr[binIdx][tIdx] += 1
+            if (densityFactor < CONGEST_THRESHOLD) {
+              congestionAccum.get(race.id)![binIdx][tIdx] += 1
+            }
           }
         }
       } // end timestep loop
@@ -341,23 +358,39 @@ async function runSimulation(config: SimConfig): Promise<void> {
     // ---------------------------------------------------------------------------
     // Aggregate risk map
     // ---------------------------------------------------------------------------
+    // A bouchon = >=10 runners simultaneously slowed by congestion on a
+    // non-overtakable section. Density gives the group size; congestion gives
+    // whether they are actually stuck.
+    const JAM_RUNNERS = 10
     const riskMap: RiskMapEntry[] = []
     for (const { race, nBins, binToSeg } of raceMeta) {
       const densityArr = densityAccum.get(race.id)!
+      const congArr = congestionAccum.get(race.id)!
       for (let b = 0; b < nBins; b++) {
         const binDensity = densityArr[b]
+        const binCong = congArr[b]
         let peakDensity = 0
-        let jamCount = 0
+        let peakCongested = 0
+        let jamTime = 0 // timesteps that are a real bouchon (>= JAM_RUNNERS slowed)
+        let activeTime = 0 // timesteps with at least one runner present
         for (let tIdx = 0; tIdx < nTimestamps; tIdx++) {
-          const d = binDensity[tIdx] / nRuns // average runners per 150 m bin
+          const d = binDensity[tIdx] / nRuns // avg runners in this 150 m bin
+          const c = binCong[tIdx] / nRuns // avg runners slowed by the crowd
           if (d > peakDensity) peakDensity = d
-          if (d > 8) jamCount++ // >8 runners in 150 m = potential jam
+          if (c > peakCongested) peakCongested = c
+          if (d > 0.5) activeTime++
+          if (c >= JAM_RUNNERS) jamTime++
         }
-        if (peakDensity < 1) continue // skip near-empty bins
+        // Only surface bins that actually congest (forming or full bouchon)
+        if (peakCongested < JAM_RUNNERS / 2) continue
 
-        const jamProbability = nTimestamps > 0 ? jamCount / nTimestamps : 0
-        // Normalise peak against ~25 runners in a 150 m bin (a real bottleneck)
-        const riskScore = Math.min(1.0, (peakDensity / 25) * 0.6 + jamProbability * 0.4)
+        // Probability the section is a genuine bouchon while runners are on it
+        const jamProbability = activeTime > 0 ? jamTime / activeTime : 0
+        // Risk scales with how big the jam gets and how persistent it is
+        const riskScore = Math.min(
+          1.0,
+          (peakCongested / 25) * 0.6 + jamProbability * 0.4
+        )
 
         riskMap.push({
           raceId: race.id,
