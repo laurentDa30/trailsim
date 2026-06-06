@@ -28,7 +28,10 @@ interface Step4ConstraintsProps {
   onJamThresholdChange: (v: number) => void
   logistics: PlacedLogi[]
   onLogisticsChange: (l: PlacedLogi[]) => void
+  resources: { effectif: number; barrieres: number }
 }
+
+const PERSONNEL_TYPES = ['signaleur', 'benevole', 'medical', 'chrono']
 
 export function Step4Constraints({
   eventId,
@@ -37,6 +40,7 @@ export function Step4Constraints({
   onJamThresholdChange,
   logistics,
   onLogisticsChange,
+  resources,
 }: Step4ConstraintsProps) {
   // Parse GPX once for the map
   const parsedRaces = useMemo(
@@ -258,6 +262,47 @@ export function Step4Constraints({
             )
           })}
         </div>
+
+        {/* Effectifs déployés */}
+        {(() => {
+          const personnel = logistics.filter((l) => PERSONNEL_TYPES.includes(l.type)).length
+          const barrages = logistics.filter((l) => l.type === 'barrage').length
+          const bar = (used: number, total: number) => {
+            const over = used > total
+            const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0
+            const color = over ? 'var(--color-danger)' : 'var(--color-safe)'
+            return { over, pct, color }
+          }
+          const p = bar(personnel, resources.effectif)
+          const b = bar(barrages, resources.barrieres)
+          return (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              {[
+                { label: 'Personnel déployé', used: personnel, total: resources.effectif, m: p },
+                { label: 'Barrages posés', used: barrages, total: resources.barrieres, m: b },
+              ].map((row) => (
+                <div key={row.label} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span style={{ color: 'var(--color-ink-3)' }}>{row.label}</span>
+                    <span className="font-mono tabular-nums" style={{ color: row.m.color }}>
+                      {row.used} / {row.total}
+                      {row.m.over && ' ⚠'}
+                    </span>
+                  </div>
+                  <div
+                    className="h-1.5 rounded-full overflow-hidden"
+                    style={{ background: 'var(--color-bg-2)' }}
+                  >
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${row.m.pct}%`, background: row.m.color }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Map */}

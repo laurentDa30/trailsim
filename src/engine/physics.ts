@@ -1,19 +1,15 @@
 /**
- * Minetti cost-of-transport model for running on slopes.
- * Returns a speed multiplier relative to flat running.
+ * Slope speed multiplier relative to flat running, based on Tobler's hiking
+ * function: speed peaks at a gentle −5% downhill and falls off on both sides.
+ * Monotonic away from the peak, so steeper climbs and descents are always
+ * slower (the previous quadratic wrongly sped up very steep climbs).
  *
- * i = slope fraction (not %)
- * Uphill: penalises speed quadratically
- * Downhill: small bonus up to a limit, then penalises on very steep descents
+ * slopePct: slope in percent (positive = uphill)
  */
 export function getMinettiSlopeFactor(slopePct: number): number {
   const i = slopePct / 100
-  if (i >= 0) {
-    // Uphill: speed drops with slope
-    return Math.max(0.1, 1 - 2.5 * i + 10 * i * i)
-  }
-  // Downhill: slight bonus on gentle descents, penalty on steep ones
-  return Math.min(1.3, Math.max(0.3, 1 + 1.5 * i - 5 * i * i))
+  const factor = Math.exp(-3.5 * (Math.abs(i + 0.05) - 0.05))
+  return Math.max(0.12, Math.min(1.25, factor))
 }
 
 /**

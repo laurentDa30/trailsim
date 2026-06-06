@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ZapIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -73,11 +73,28 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
     return []
   })
 
-  // Peloton config is held here so it survives step navigation, and is
-  // restored from the last simulation's runner profiles.
-  const [pelotonConfigs, setPelotonConfigs] = useState<PelotonConfigs>(() =>
-    buildInitialConfigs(initialRaces, simulation?.runnerProfiles)
-  )
+  // Peloton config: survives step navigation, restored from a local draft if
+  // present, else from the last simulation's runner profiles, else defaults.
+  const pelotonStorageKey = `ts_peloton:${event.id}`
+  const [pelotonConfigs, setPelotonConfigs] = useState<PelotonConfigs>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(pelotonStorageKey)
+        if (raw) return JSON.parse(raw) as PelotonConfigs
+      } catch {
+        /* ignore */
+      }
+    }
+    return buildInitialConfigs(initialRaces, simulation?.runnerProfiles)
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(pelotonStorageKey, JSON.stringify(pelotonConfigs))
+    } catch {
+      /* quota */
+    }
+  }, [pelotonConfigs, pelotonStorageKey])
 
   const weatherRef = useRef<WeatherData>({
     temperature: simulation?.temperature ?? 18,
@@ -251,6 +268,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               onJamThresholdChange={setJamThreshold}
               logistics={logistics}
               onLogisticsChange={setLogistics}
+              resources={resources}
             />
           )}
         </div>
