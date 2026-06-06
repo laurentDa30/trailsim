@@ -97,16 +97,37 @@ interface SavedProfile {
 }
 
 /**
- * Build the initial per-race peloton config — restored from a previously saved
- * simulation's runner profiles when available, otherwise the defaults.
+ * Build the initial per-race peloton config. Always keeps the full set of
+ * archetypes (so e.g. "Marcheur" never disappears); when a saved simulation
+ * exists, its percentages and physical params are merged in by label
+ * (archetypes absent from the save — i.e. set to 0% — keep 0%).
  */
 export function buildInitialConfigs(
   races: { id: string }[],
   savedProfiles?: SavedProfile[] | null
 ): PelotonConfigs {
-  const base: Archetype[] =
-    savedProfiles && savedProfiles.length > 0
-      ? savedProfiles.map((p, i) => ({
+  const base: Archetype[] = DEFAULT_ARCHETYPES.map((a) => ({ ...a }))
+  if (savedProfiles && savedProfiles.length > 0) {
+    const byLabel = new Map(savedProfiles.map((p) => [p.label, p]))
+    base.forEach((a) => {
+      const p = byLabel.get(a.label)
+      if (p) {
+        a.percentage = p.percentage
+        a.speedMin = p.baseSpeedMin
+        a.speedMax = p.baseSpeedMax
+        a.fatiguePlancher = Math.round(p.fatigueFactor * 100)
+        a.techLevel = Math.round(p.techSkill * 100)
+        a.ravito = p.ravitoDuration
+        a.abandon = Math.round(p.abandonRate * 100)
+      } else {
+        // Was at 0% in the saved simulation → keep the archetype but at 0%
+        a.percentage = 0
+      }
+    })
+    // Any saved profile that isn't a default archetype (custom) is appended
+    savedProfiles.forEach((p, i) => {
+      if (!base.some((a) => a.label === p.label)) {
+        base.push({
           id: `saved-${i}`,
           label: p.label,
           color: p.color,
@@ -117,8 +138,10 @@ export function buildInitialConfigs(
           techLevel: Math.round(p.techSkill * 100),
           ravito: p.ravitoDuration,
           abandon: Math.round(p.abandonRate * 100),
-        }))
-      : DEFAULT_ARCHETYPES.map((a) => ({ ...a }))
+        })
+      }
+    })
+  }
   const init: PelotonConfigs = {}
   races.forEach((r) => {
     init[r.id] = { totalRunners: 100, archetypes: base.map((a) => ({ ...a })) }
