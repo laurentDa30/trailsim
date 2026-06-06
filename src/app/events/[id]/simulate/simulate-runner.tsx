@@ -28,7 +28,7 @@ interface SimulateRunnerProps {
     color: string
     gpxPoints: string
     startTime: number
-    segments: { indexStart: number; width: number; techLevel: number }[]
+    segments: { type: string; indexStart: number; width: number; techLevel: number }[]
   }[]
 }
 
@@ -133,13 +133,25 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
           totalRunners: runnersPerRace,
           gpxPoints,
           profiles: profilesPerRace,
-          // Map placed narrow/technical sections to engine constraints
-          constraints: r.segments.map((s) => ({
-            dist: gpxPoints[s.indexStart]?.dist ?? 0,
-            widthRatio: s.width,
-            techLevel: s.techLevel,
-            influenceKm: 0.2,
-          })),
+          // Narrow/technical sections become engine constraints (ravitos excluded)
+          constraints: r.segments
+            .filter((s) => s.type !== 'RAVITO')
+            .map((s) => ({
+              dist: gpxPoints[s.indexStart]?.dist ?? 0,
+              widthRatio: s.width,
+              techLevel: s.techLevel,
+              influenceKm: 0.2,
+            })),
+          // Placed ravito points → positions as fractions of the race
+          ravitos: (() => {
+            const total = gpxPoints.length > 0 ? gpxPoints[gpxPoints.length - 1].dist : 0
+            if (total <= 0) return [] as number[]
+            return r.segments
+              .filter((s) => s.type === 'RAVITO')
+              .map((s) => (gpxPoints[s.indexStart]?.dist ?? 0) / total)
+              .filter((f) => f > 0 && f < 1)
+              .sort((a, b) => a - b)
+          })(),
         }
       }),
       weather: {
@@ -165,7 +177,10 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
       jamThreshold: simulation.jamThreshold,
       nProfiles: simulation.runnerProfiles.length,
       nRaces: races.length,
-      nConstraints: races.reduce((sum, r) => sum + r.segments.length, 0),
+      nConstraints: races.reduce(
+        (sum, r) => sum + r.segments.filter((s) => s.type !== 'RAVITO').length,
+        0
+      ),
     })
 
     run(config, logLines)

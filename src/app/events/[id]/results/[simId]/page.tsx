@@ -53,6 +53,7 @@ export default async function ResultsPage({ params }: PageProps) {
       color: race.color,
       distance: race.distance,
       elevGain: race.elevGain,
+      startTime: race.startTime,
       gpxPoints,
     }
   })

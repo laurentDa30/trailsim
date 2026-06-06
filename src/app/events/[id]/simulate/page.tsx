@@ -43,6 +43,7 @@ export default async function SimulatePage({ params }: PageProps) {
     gpxPoints: r.gpxPoints,
     startTime: r.startTime,
     segments: r.segments.map((s) => ({
+      type: s.type,
       indexStart: s.indexStart,
       width: s.width,
       techLevel: s.techLevel,

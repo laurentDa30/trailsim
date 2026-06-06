@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { AlertTriangleIcon, Trash2Icon, MapPinIcon } from 'lucide-react'
 import type { GPXPoint } from '@/engine/types'
-import { CONSTRAINT_PRESETS, presetOf } from './constraint-presets'
+import { CONSTRAINT_PRESETS, RAVITO_PRESET, presetOf } from './constraint-presets'
 import type { ConstraintMarker } from './constraint-map'
 import { LOGI_TYPES, logiTypeOf, type PlacedLogi } from '@/lib/logistics'
 
@@ -165,6 +165,54 @@ export function Step4Constraints({
               </button>
             )
           })}
+        </div>
+      </div>
+
+      {/* Ravito buttons — snap to trace */}
+      <div>
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+          Ravitaillements (sur le tracé)
+        </span>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {(() => {
+            const active = placingPreset === RAVITO_PRESET.type
+            const count = constraints.filter((c) => c.type === RAVITO_PRESET.type).length
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  setPlacingLogiType(null)
+                  setPlacingPreset((cur) => (cur === RAVITO_PRESET.type ? null : RAVITO_PRESET.type))
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors"
+                style={{
+                  background: active ? 'var(--color-bg-2)' : 'var(--color-bg-1)',
+                  border: '1px solid',
+                  borderColor: active ? RAVITO_PRESET.color : 'var(--color-line)',
+                }}
+              >
+                <span
+                  className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[11px] font-bold text-white"
+                  style={{ background: RAVITO_PRESET.color }}
+                >
+                  {RAVITO_PRESET.letter}
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-sm" style={{ color: 'var(--color-ink)' }}>
+                    {RAVITO_PRESET.label}
+                    {count > 0 && (
+                      <span className="ml-1.5 text-[11px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
+                        ×{count}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
+                    {RAVITO_PRESET.description}
+                  </span>
+                </span>
+              </button>
+            )
+          })()}
         </div>
       </div>
 

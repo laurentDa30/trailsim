@@ -47,6 +47,24 @@ export const CONSTRAINT_PRESETS: ConstraintPreset[] = [
   },
 ]
 
+// Ravito / aid station — a stop point on the course (not a capacity constraint)
+export const RAVITO_PRESET: ConstraintPreset = {
+  type: 'RAVITO',
+  label: 'Ravitaillement',
+  description: 'Point de ravito / contrôle (arrêt)',
+  color: '#22D3EE',
+  letter: 'R',
+  widthRatio: 0.5,
+  techLevel: 0,
+  influenceM: 0,
+}
+
+export const ALL_PRESETS = [...CONSTRAINT_PRESETS, RAVITO_PRESET]
+
+export function isRavito(type: string): boolean {
+  return type === 'RAVITO'
+}
+
 export function presetOf(type: string): ConstraintPreset {
-  return CONSTRAINT_PRESETS.find((p) => p.type === type) ?? CONSTRAINT_PRESETS[0]
+  return ALL_PRESETS.find((p) => p.type === type) ?? CONSTRAINT_PRESETS[0]
 }

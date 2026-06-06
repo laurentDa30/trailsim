@@ -54,6 +54,7 @@ export interface ResultsViewProps {
     color: string
     distance: number
     elevGain: number
+    startTime: number
     gpxPoints: GPXPoint[]
   }[]
   runnerProfiles: {
@@ -535,12 +536,14 @@ export function ResultsView({
         if (n > peak) peak = n
       }
       const zones = riskMap.filter((e) => e.raceId === race.id).length
+      const startSec = race.startTime * 60
       return {
         id: race.id,
         name: race.name,
         color: race.color,
         total: rRunners.length,
-        firstSec: isFinite(firstSec) ? firstSec : null,
+        // Race duration of the winner (excludes the staggered start wait)
+        firstDuration: isFinite(firstSec) ? firstSec - startSec : null,
         dnf,
         peak,
         zones,
@@ -723,9 +726,9 @@ export function ResultsView({
                       <div className="grid grid-cols-4 gap-1 text-center">
                         <div>
                           <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-ink)' }}>
-                            {s.firstSec != null ? formatTimeHHMM(s.firstSec) : '—'}
+                            {s.firstDuration != null ? formatTimeHHMM(s.firstDuration) : '—'}
                           </div>
-                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>1er</div>
+                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>1er (durée)</div>
                         </div>
                         <div>
                           <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-warning)' }}>

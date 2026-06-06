@@ -64,6 +64,7 @@ export interface RaceConfig {
   gpxPoints: GPXPoint[]
   profiles: RunnerProfile[]
   constraints?: Constraint[]
+  ravitos?: number[]    // ravito positions as fractions 0-1 of the race
 }
 
 export interface SimConfig {

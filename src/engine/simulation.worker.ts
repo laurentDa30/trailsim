@@ -175,14 +175,14 @@ async function runSimulation(config: SimConfig): Promise<void> {
         })
       }
 
-      // Ravito checkpoint positions (fraction 0–1 of each race)
+      // Ravito checkpoint positions (fraction 0–1 of each race): use the
+      // organiser's placed ravitos, falling back to ~33% / ~66% if none.
       const ravitoPositions: Map<string, number[]> = new Map()
       for (const { race } of raceMeta) {
         const pts = race.gpxPoints
         if (pts.length < 2) { ravitoPositions.set(race.id, []); continue }
-        const totalDist = pts[pts.length - 1].dist
-        // Place ravito stops at ~33% and ~66% of the race
-        ravitoPositions.set(race.id, [0.33, 0.66])
+        const placed = race.ravitos ?? []
+        ravitoPositions.set(race.id, placed.length > 0 ? placed : [0.33, 0.66])
       }
 
       // Track which runners have already stopped at each ravito
