@@ -376,6 +376,127 @@ export function Step3Conditions({ simulation, onUpdate }: Step3ConditionsProps) 
           )}
         </div>
       </div>
+
+      {/* Conséquences estimées sur la simulation */}
+      <ConditionsImpact
+        temperature={temperature}
+        wind={wind}
+        rain={rain}
+        rainIntensity={rainIntensity}
+        fog={fog}
+      />
+    </div>
+  )
+}
+
+function ConditionsImpact({
+  temperature,
+  wind,
+  rain,
+  rainIntensity,
+  fog,
+}: {
+  temperature: number
+  wind: number
+  rain: boolean
+  rainIntensity: number
+  fog: boolean
+}) {
+  // Mirror the engine model so organisers see what the conditions will do.
+  const items: { text: string; tone: 'safe' | 'warning' | 'danger' | 'ink' }[] = []
+
+  // Temperature headline
+  if (temperature >= 12 && temperature <= 18) {
+    items.push({ text: 'Température idéale — aucune pénalité de vitesse.', tone: 'safe' })
+  } else if (temperature > 18 && temperature <= 22) {
+    items.push({ text: 'Température douce — pas de pénalité notable.', tone: 'safe' })
+  } else if (temperature > 22) {
+    const flat = Math.round((temperature - 22) * 2.5)
+    items.push({
+      text:
+        temperature > 30
+          ? `Chaleur extrême (${temperature}°C) : −${flat}% sur le plat, doublé en côte (−${flat * 2}%).`
+          : `Chaleur (${temperature}°C) : −${flat}% sur le plat, doublé au-delà de 6% de pente.`,
+      tone: temperature > 30 ? 'danger' : 'warning',
+    })
+  } else if (temperature < 5) {
+    items.push({
+      text: `Froid (${temperature}°C) : davantage d'abandons, prudence sur l'hypothermie.`,
+      tone: temperature < 0 ? 'danger' : 'warning',
+    })
+  } else {
+    items.push({ text: `Frais (${temperature}°C) — conditions favorables.`, tone: 'safe' })
+  }
+
+  if (wind > 0) {
+    const pen = Math.round((wind / 30) * 6)
+    items.push({
+      text: `Vent ${wind} km/h : jusqu'à −${pen}% face au vent (léger gain dos au vent).`,
+      tone: wind >= 40 ? 'warning' : 'ink',
+    })
+  }
+
+  if (rain) {
+    const sp = Math.round(8 * (rainIntensity / 100))
+    const ab = Math.round(rainIntensity * 0.6)
+    items.push({
+      text: `Pluie ${rainIntensity}% : −${sp}% de vitesse (plus pour les moins techniques), abandons +${ab}%, terrain glissant.`,
+      tone: rainIntensity >= 60 ? 'danger' : 'warning',
+    })
+  }
+
+  if (fog) {
+    items.push({ text: 'Brouillard : −5% de vitesse, vigilance accrue.', tone: 'warning' })
+  }
+
+  // Overall abandon multiplier (same formula as the engine)
+  let abandonMult = 1
+  if (temperature > 22) abandonMult += (temperature - 22) * 0.045
+  if (temperature < 5) abandonMult += (5 - temperature) * 0.03
+  if (rain) abandonMult += (rainIntensity / 100) * 0.6
+  if (fog) abandonMult += 0.1
+
+  const toneColor = (t: string) =>
+    t === 'safe'
+      ? 'var(--color-safe)'
+      : t === 'danger'
+        ? 'var(--color-danger)'
+        : t === 'warning'
+          ? 'var(--color-warning)'
+          : 'var(--color-ink-3)'
+
+  return (
+    <div
+      className="rounded-xl p-4"
+      style={{ border: '1px solid var(--color-line)', background: 'var(--color-bg-1)' }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+          Conséquences sur la simulation
+        </span>
+        {abandonMult > 1.02 && (
+          <span
+            className="text-xs font-mono px-2 py-0.5 rounded-full"
+            style={{
+              color: 'var(--color-warning)',
+              background: 'color-mix(in oklab, var(--color-warning) 14%, transparent)',
+            }}
+          >
+            abandons ×{abandonMult.toFixed(2)}
+          </span>
+        )}
+      </div>
+      <ul className="space-y-1">
+        {items.map((it, i) => (
+          <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
+            <span style={{ color: toneColor(it.tone), lineHeight: 1.4 }}>•</span>
+            <span style={{ color: 'var(--color-ink-2)' }}>{it.text}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[10px] mt-2" style={{ color: 'var(--color-ink-4)' }}>
+        Ces effets seront appliqués au prochain lancement de simulation.
+      </p>
     </div>
   )
 }
