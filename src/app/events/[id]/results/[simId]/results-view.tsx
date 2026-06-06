@@ -408,6 +408,16 @@ export function ResultsView({
     }
   }, [playing, maxIndex, speed])
 
+  // Runners on course per race at the active time (for the map legend)
+  const liveByRace = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const r of runnersData) {
+      const p = r.positions[timeIndex] ?? 0
+      if (p > 0 && p < 1) m.set(r.raceId, (m.get(r.raceId) ?? 0) + 1)
+    }
+    return m
+  }, [runnersData, timeIndex])
+
   // Runners currently on course (started, not finished) at the active time
   const runnersOnCourse = useMemo(() => {
     let n = 0
@@ -618,6 +628,35 @@ export function ResultsView({
               onMoveLogi={moveLogi}
               onRemoveLogi={removeLogi}
             />
+
+            {/* Course legend — colour = course, with live on-course count */}
+            {races.length > 0 && (
+              <div
+                className="absolute top-3 left-3 z-[1000] flex flex-col gap-1 px-2.5 py-2 rounded-lg shadow-lg"
+                style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
+              >
+                <span className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-ink-4)' }}>
+                  Courses · en piste
+                </span>
+                {races.map((race) => (
+                  <button
+                    key={race.id}
+                    type="button"
+                    onClick={() => toggleRace(race.id)}
+                    className="flex items-center gap-1.5"
+                    style={{ opacity: visibleRaces.has(race.id) ? 1 : 0.4 }}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: race.color }} />
+                    <span className="text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
+                      {race.name}
+                    </span>
+                    <span className="ml-auto text-[10px] font-mono tabular-nums" style={{ color: 'var(--color-lime)' }}>
+                      {liveByRace.get(race.id) ?? 0}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Placement-mode banner */}
             {placementType && (

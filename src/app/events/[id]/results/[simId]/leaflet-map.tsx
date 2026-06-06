@@ -356,7 +356,8 @@ export default function LeafletMap({
       if (!race || race.gpxPoints.length < 2) continue
       const ll = latLngAtPosition(race.gpxPoints, pos)
       if (!ll) continue
-      out.push({ lat: ll[0], lng: ll[1], color: r.color })
+      // Colour dots by COURSE (race) so the waves are distinguishable
+      out.push({ lat: ll[0], lng: ll[1], color: race.color })
     }
     return out
   }, [showRunners, runnersData, timeIndex, visibleRaces, racesById])
