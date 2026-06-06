@@ -7,6 +7,27 @@ import 'leaflet/dist/leaflet.css'
 import type { GPXPoint } from '@/engine/types'
 import { presetOf } from './constraint-presets'
 import { logiTypeOf, type PlacedLogi } from '@/lib/logistics'
+import { slopeColor, SLOPE_STOPS } from '@/lib/slope'
+
+/** Decimate then split a track into consecutive 2-point segments coloured by slope. */
+function slopeSegments(points: GPXPoint[], maxPts = 400) {
+  if (points.length < 2) return [] as { positions: [number, number][]; color: string }[]
+  const step = Math.max(1, Math.ceil(points.length / maxPts))
+  const pts: GPXPoint[] = []
+  for (let i = 0; i < points.length; i += step) pts.push(points[i])
+  if (pts[pts.length - 1] !== points[points.length - 1]) pts.push(points[points.length - 1])
+  const segs: { positions: [number, number][]; color: string }[] = []
+  for (let i = 0; i < pts.length - 1; i++) {
+    segs.push({
+      positions: [
+        [pts[i].lat, pts[i].lng],
+        [pts[i + 1].lat, pts[i + 1].lng],
+      ],
+      color: slopeColor(pts[i].slope),
+    })
+  }
+  return segs
+}
 
 export interface ConstraintMarker {
   id: string
@@ -126,14 +147,15 @@ export default function ConstraintMap({
       <MapContainer center={center} zoom={13} style={{ width: '100%', height: '100%', background: '#14110f' }} preferCanvas>
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
 
+        {/* Trace coloured by steepness (slope preview) */}
         {races.map((r) =>
-          r.gpxPoints.length > 1 ? (
+          slopeSegments(r.gpxPoints).map((s, i) => (
             <Polyline
-              key={r.id}
-              positions={r.gpxPoints.map((p) => [p.lat, p.lng]) as [number, number][]}
-              pathOptions={{ color: r.color, weight: 3, opacity: 0.85 }}
+              key={`${r.id}-${i}`}
+              positions={s.positions}
+              pathOptions={{ color: s.color, weight: 4, opacity: 0.9 }}
             />
-          ) : null
+          ))
         )}
 
         <ClickHandler
@@ -202,6 +224,24 @@ export default function ConstraintMap({
           )
         })}
       </MapContainer>
+
+      {/* Steepness legend */}
+      <div
+        className="absolute bottom-2 left-2 z-[1000] flex flex-col gap-0.5 px-2 py-1.5 rounded-lg"
+        style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
+      >
+        <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+          Raideur
+        </span>
+        {SLOPE_STOPS.map((s) => (
+          <span key={s.label} className="flex items-center gap-1.5">
+            <span className="w-3 h-1.5 rounded-sm" style={{ background: s.color }} />
+            <span className="text-[10px]" style={{ color: 'var(--color-ink-3)' }}>
+              {s.label}
+            </span>
+          </span>
+        ))}
+      </div>
     </>
   )
 }

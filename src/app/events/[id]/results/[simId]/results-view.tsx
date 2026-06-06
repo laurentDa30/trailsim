@@ -505,6 +505,49 @@ export function ResultsView({
     return peak
   }, [runnersData, timestamps])
 
+  // Per-course breakdown of the key stats
+  const perRaceStats = useMemo(() => {
+    return races.map((race) => {
+      const rRunners = runnersData.filter((r) => r.raceId === race.id)
+      let firstSec = Infinity
+      let dnf = 0
+      for (const r of rRunners) {
+        let maxPos = 0
+        let finished = false
+        for (let t = 0; t < r.positions.length; t++) {
+          const p = r.positions[t]
+          if (p > maxPos) maxPos = p
+          if (!finished && p >= 1) {
+            finished = true
+            const s = rawTimestamps[t]
+            if (s != null && s < firstSec) firstSec = s
+          }
+        }
+        if (maxPos < 0.999) dnf++
+      }
+      let peak = 0
+      for (let t = 0; t < rawTimestamps.length; t++) {
+        let n = 0
+        for (const r of rRunners) {
+          const p = r.positions[t] ?? 0
+          if (p > 0 && p < 1) n++
+        }
+        if (n > peak) peak = n
+      }
+      const zones = riskMap.filter((e) => e.raceId === race.id).length
+      return {
+        id: race.id,
+        name: race.name,
+        color: race.color,
+        total: rRunners.length,
+        firstSec: isFinite(firstSec) ? firstSec : null,
+        dnf,
+        peak,
+        zones,
+      }
+    })
+  }, [races, runnersData, rawTimestamps, riskMap])
+
   const maxPeakDensity = useMemo(
     () => Math.max(1, ...riskMap.map((e) => e.peakDensity)),
     [riskMap]
@@ -651,6 +694,63 @@ export function ResultsView({
                 sub="toutes courses"
               />
             </div>
+
+            {/* Per-course detail */}
+            {perRaceStats.length > 0 && (
+              <div className="px-3 pb-3">
+                <div
+                  className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
+                  style={{ color: 'var(--color-ink-4)' }}
+                >
+                  Détail par course
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {perRaceStats.map((s) => (
+                    <div
+                      key={s.id}
+                      className="rounded-lg px-2.5 py-2"
+                      style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                        <span className="text-xs font-medium" style={{ color: 'var(--color-ink-2)' }}>
+                          {s.name}
+                        </span>
+                        <span className="ml-auto text-[10px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
+                          {s.total} crs
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1 text-center">
+                        <div>
+                          <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-ink)' }}>
+                            {s.firstSec != null ? formatTimeHHMM(s.firstSec) : '—'}
+                          </div>
+                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>1er</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-warning)' }}>
+                            {s.dnf}
+                          </div>
+                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>DNF</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-ink)' }}>
+                            {s.peak}
+                          </div>
+                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>pic</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-ink)' }}>
+                            {s.zones}
+                          </div>
+                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>zones</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Section>
 
           {/* COURSES section */}

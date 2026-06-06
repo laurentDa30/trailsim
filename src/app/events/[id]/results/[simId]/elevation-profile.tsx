@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
+import { slopeColor, SLOPE_STOPS } from '@/lib/slope'
 
 interface ElevationProfileProps {
   races: {
@@ -79,9 +80,16 @@ export function ElevationProfile({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const activeRace = visible.find((r) => r.id === selectedId) ?? visible[0] ?? null
 
-  const { line, area, minAlt, maxAlt, maxDist, riskMarks } = useMemo(() => {
+  const { line, segs, minAlt, maxAlt, maxDist, riskMarks } = useMemo(() => {
     if (!activeRace) {
-      return { line: '', area: '', minAlt: 0, maxAlt: 1, maxDist: 1, riskMarks: [] as { x: number; score: number }[] }
+      return {
+        line: '',
+        segs: [] as { points: string; color: string }[],
+        minAlt: 0,
+        maxAlt: 1,
+        maxDist: 1,
+        riskMarks: [] as { x: number; score: number }[],
+      }
     }
     const pts = activeRace.gpxPoints
     let minA = Infinity
@@ -103,10 +111,20 @@ export function ElevationProfile({
 
     const sampled = sample(pts)
     const ln = sampled.map((p) => `${xOf(p.dist).toFixed(1)},${yOf(p.alt).toFixed(1)}`).join(' ')
-    const ar =
-      `${xOf(sampled[0].dist).toFixed(1)},${(H - padBottom).toFixed(1)} ` +
-      ln +
-      ` ${xOf(sampled[sampled.length - 1].dist).toFixed(1)},${(H - padBottom).toFixed(1)}`
+
+    // Steepness-coloured fill: one filled quad per sample segment
+    const segs = sampled.slice(0, -1).map((p, i) => {
+      const q = sampled[i + 1]
+      const x1 = xOf(p.dist)
+      const x2 = xOf(q.dist)
+      const y1 = yOf(p.alt)
+      const y2 = yOf(q.alt)
+      const base = H - padBottom
+      return {
+        points: `${x1.toFixed(1)},${base.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${base.toFixed(1)}`,
+        color: slopeColor(p.slope),
+      }
+    })
 
     const marks = riskMap
       .filter((e) => e.raceId === activeRace.id)
@@ -117,7 +135,7 @@ export function ElevationProfile({
       })
       .filter((m): m is { x: number; score: number } => m !== null)
 
-    return { line: ln, area: ar, minAlt: minA, maxAlt: maxA, maxDist: maxD, riskMarks: marks }
+    return { line: ln, segs, minAlt: minA, maxAlt: maxA, maxDist: maxD, riskMarks: marks }
   }, [activeRace, riskMap])
 
   function riskColor(score: number) {
@@ -181,8 +199,19 @@ export function ElevationProfile({
             </button>
           )
         })}
+        {/* Steepness legend */}
+        <span className="ml-auto flex items-center gap-1.5">
+          {SLOPE_STOPS.map((s) => (
+            <span key={s.label} className="flex items-center gap-0.5" title={s.label}>
+              <span className="w-2 h-2 rounded-sm" style={{ background: s.color }} />
+            </span>
+          ))}
+          <span className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>
+            plat → mur
+          </span>
+        </span>
         {hoverDistKm != null && (
-          <span className="ml-auto text-[10px] font-mono" style={{ color: activeColor }}>
+          <span className="text-[10px] font-mono" style={{ color: activeColor }}>
             km {hoverDistKm.toFixed(1)}
           </span>
         )}
@@ -213,7 +242,9 @@ export function ElevationProfile({
       >
         {activeRace && (
           <>
-            <polygon points={area} fill={activeColor} opacity={0.14} />
+            {segs.map((s, i) => (
+              <polygon key={i} points={s.points} fill={s.color} opacity={0.5} stroke="none" />
+            ))}
             <polyline points={line} fill="none" stroke={activeColor} strokeWidth={1.5} opacity={0.95} />
           </>
         )}
