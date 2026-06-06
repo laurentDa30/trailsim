@@ -266,7 +266,6 @@ export function ResultsView({
   simulation,
   result,
   races,
-  runnerProfiles,
 }: ResultsViewProps) {
   const [visibleRaces, setVisibleRaces] = useState<Set<string>>(
     () => new Set(races.map((r) => r.id))
@@ -550,6 +549,24 @@ export function ResultsView({
       }
     })
   }, [races, runnersData, rawTimestamps, riskMap])
+
+  // Per-course profile mix, from the actually simulated runners
+  const profilesByRace = useMemo(() => {
+    return races.map((race) => {
+      const rr = runnersData.filter((r) => r.raceId === race.id)
+      const total = rr.length
+      const byLabel = new Map<string, { label: string; color: string; count: number }>()
+      for (const r of rr) {
+        const e = byLabel.get(r.profileLabel) ?? { label: r.profileLabel, color: r.color, count: 0 }
+        e.count++
+        byLabel.set(r.profileLabel, e)
+      }
+      const profiles = [...byLabel.values()]
+        .map((e) => ({ ...e, percentage: total > 0 ? (e.count / total) * 100 : 0 }))
+        .sort((a, b) => b.percentage - a.percentage)
+      return { id: race.id, name: race.name, color: race.color, total, profiles }
+    })
+  }, [races, runnersData])
 
   const maxPeakDensity = useMemo(
     () => Math.max(1, ...riskMap.map((e) => e.peakDensity)),
@@ -1008,49 +1025,48 @@ export function ResultsView({
           </Section>
 
           {/* PROFILS section */}
-          <Section icon={<UsersIcon size={12} />} label="Profils" count={runnerProfiles.length} defaultOpen={false}>
-            <div className="p-3 flex flex-col gap-2">
-              {runnerProfiles.length === 0 && (
+          <Section icon={<UsersIcon size={12} />} label="Profils par course" count={races.length} defaultOpen={false}>
+            <div className="p-3 flex flex-col gap-3">
+              {profilesByRace.every((r) => r.profiles.length === 0) && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
-                  Aucun profil configuré.
+                  Aucun profil — relancez une simulation.
                 </p>
               )}
-              {runnerProfiles.map((profile) => (
-                <div key={profile.id} className="flex flex-col gap-1.5 px-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ background: profile.color }}
-                    />
-                    <span
-                      className="flex-1 text-sm truncate"
-                      style={{ color: 'var(--color-ink-2)' }}
-                    >
-                      {profile.label}
-                    </span>
-                    <span
-                      className="text-xs font-mono"
-                      style={{ color: 'var(--color-ink-3)' }}
-                    >
-                      {profile.percentage.toFixed(0)}%
-                    </span>
-                  </div>
-                  {/* Percentage bar */}
-                  <div
-                    className="h-1 rounded-full overflow-hidden"
-                    style={{ background: 'var(--color-bg-2)' }}
-                  >
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(profile.percentage, 100)}%`,
-                        background: profile.color,
-                        opacity: 0.8,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
+              {profilesByRace.map(
+                (race) =>
+                  race.profiles.length > 0 && (
+                    <div key={race.id} className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: race.color }} />
+                        <span className="text-xs font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+                          {race.name}
+                        </span>
+                        <span className="ml-auto text-[10px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
+                          {race.total} crs
+                        </span>
+                      </div>
+                      {race.profiles.map((p) => (
+                        <div key={p.label} className="flex flex-col gap-1 pl-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+                            <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-ink-3)' }}>
+                              {p.label}
+                            </span>
+                            <span className="text-[11px] font-mono" style={{ color: 'var(--color-ink-3)' }}>
+                              {Math.round((p.percentage / 100) * race.total)} · {p.percentage.toFixed(0)}%
+                            </span>
+                          </div>
+                          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-bg)' }}>
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${Math.min(p.percentage, 100)}%`, background: p.color, opacity: 0.8 }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+              )}
             </div>
           </Section>
 
