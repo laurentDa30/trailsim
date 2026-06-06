@@ -317,6 +317,7 @@ export function ResultsView({
     runners: true,
     zones: true,
     shared: true,
+    collisions: true,
     density: true,
     heat: false,
     logistique: true,
@@ -606,6 +607,7 @@ export function ResultsView({
               showRunners={layers.runners}
               showZones={layers.zones}
               showShared={layers.shared}
+              showCollisions={layers.collisions}
               showDensity={layers.density}
               showHeat={layers.heat}
               showLogistics={layers.logistique}
@@ -670,6 +672,7 @@ export function ResultsView({
               <LayerSwitch label="Coureurs" on={layers.runners} onClick={() => setLayer('runners', !layers.runners)} />
               <LayerSwitch label="Zones risque" on={layers.zones} onClick={() => setLayer('zones', !layers.zones)} />
               <LayerSwitch label="Tronçons communs" on={layers.shared} onClick={() => setLayer('shared', !layers.shared)} />
+              <LayerSwitch label="Rencontres" on={layers.collisions} onClick={() => setLayer('collisions', !layers.collisions)} />
               <LayerSwitch label="Densité live" on={layers.density} onClick={() => setLayer('density', !layers.density)} />
               <LayerSwitch label="Heatmap" on={layers.heat} onClick={() => setLayer('heat', !layers.heat)} />
               <LayerSwitch label="Logistique" on={layers.logistique} onClick={() => setLayer('logistique', !layers.logistique)} />

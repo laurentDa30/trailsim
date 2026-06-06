@@ -154,6 +154,7 @@ interface LeafletMapProps {
   showRunners?: boolean
   showZones?: boolean
   showShared?: boolean
+  showCollisions?: boolean
   showDensity?: boolean
   showHeat?: boolean
   showLogistics?: boolean
@@ -247,6 +248,7 @@ export default function LeafletMap({
   showRunners = true,
   showZones = true,
   showShared = true,
+  showCollisions = true,
   showDensity = true,
   showHeat = false,
   showLogistics = true,
@@ -459,32 +461,45 @@ export default function LeafletMap({
           )
         })}
 
-        {/* Collision markers (where two courses meet) */}
-        {collisionMarkers.map((m) => {
-          const hl = highlightedCollision === m.i
-          const h = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, '0')}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`
-          return (
+        {/* Collision markers (where two courses meet) — magenta "target" */}
+        {showCollisions &&
+          collisionMarkers.map((m) => {
+            const hl = highlightedCollision === m.i
+            const h = (s: number) =>
+              `${String(Math.floor(s / 3600)).padStart(2, '0')}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`
+            return (
+              <CircleMarker
+                key={`coll-${m.i}`}
+                center={[m.lat, m.lng]}
+                radius={hl ? 16 : 11}
+                pathOptions={{
+                  color: '#EC4899',
+                  fillColor: '#EC4899',
+                  fillOpacity: hl ? 0.18 : 0.1,
+                  weight: hl ? 3 : 2,
+                  dashArray: '4 3',
+                }}
+              >
+                <Tooltip>
+                  <span>
+                    Rencontre : {m.names}
+                    <br />
+                    {h(m.cw.tStart)} → {h(m.cw.tEnd)} · jusqu&apos;à {Math.round(m.cw.peak)} coureurs
+                  </span>
+                </Tooltip>
+              </CircleMarker>
+            )
+          })}
+        {/* Solid centre dot of the rencontre target */}
+        {showCollisions &&
+          collisionMarkers.map((m) => (
             <CircleMarker
-              key={`coll-${m.i}`}
+              key={`coll-dot-${m.i}`}
               center={[m.lat, m.lng]}
-              radius={hl ? 13 : 8}
-              pathOptions={{
-                color: '#ffffff',
-                fillColor: '#A78BFA',
-                fillOpacity: hl ? 0.95 : 0.7,
-                weight: hl ? 3 : 1.5,
-              }}
-            >
-              <Tooltip>
-                <span>
-                  Rencontre : {m.names}
-                  <br />
-                  {h(m.cw.tStart)} → {h(m.cw.tEnd)} · jusqu&apos;à {Math.round(m.cw.peak)} coureurs
-                </span>
-              </Tooltip>
-            </CircleMarker>
-          )
-        })}
+              radius={3}
+              pathOptions={{ stroke: false, fillColor: '#EC4899', fillOpacity: 1 }}
+            />
+          ))}
 
         {/* Click-to-place handler */}
         <PlacementHandler placementType={placementType} onPlace={onPlace} />
