@@ -77,6 +77,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   // present, else from the last simulation's runner profiles, else defaults.
   const pelotonStorageKey = `ts_peloton:${event.id}`
   const [pelotonConfigs, setPelotonConfigs] = useState<PelotonConfigs>(() => {
+    // 1. Local draft (edits not yet launched)
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem(pelotonStorageKey)
@@ -85,6 +86,13 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
         /* ignore */
       }
     }
+    // 2. Per-race config saved with the last simulation
+    try {
+      if (simulation?.peloton) return JSON.parse(simulation.peloton) as PelotonConfigs
+    } catch {
+      /* ignore */
+    }
+    // 3. Rebuilt from the last simulation's profiles, else defaults
     return buildInitialConfigs(initialRaces, simulation?.runnerProfiles)
   })
 
@@ -161,6 +169,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           fog: weather.fog,
           jamThreshold,
           runnerProfiles: peloton.profiles,
+          peloton: JSON.stringify(pelotonConfigs),
           logistique: JSON.stringify(logistics),
           ressources: JSON.stringify({
             effectifTotal: resources.effectif,

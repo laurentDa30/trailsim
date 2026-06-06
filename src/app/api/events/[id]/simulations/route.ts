@@ -61,7 +61,7 @@ export async function POST(
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
 
-    const { name, totalRunners, temperature, wind, windDirection, rain, rainIntensity, fog, jamThreshold, ressources, logistique, runnerProfiles } = parsed.data
+    const { name, totalRunners, temperature, wind, windDirection, rain, rainIntensity, fog, jamThreshold, ressources, logistique, peloton, runnerProfiles } = parsed.data
 
     const simulation = await db.simulation.create({
       data: {
@@ -77,6 +77,7 @@ export async function POST(
         jamThreshold,
         ...(ressources !== undefined && { ressources }),
         ...(logistique !== undefined && { logistique }),
+        ...(peloton !== undefined && { peloton }),
         status: "PENDING",
         runnerProfiles: {
           create: runnerProfiles.map((profile) => ({

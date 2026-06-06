@@ -112,6 +112,7 @@ model Simulation {
   resultSnapshot String?
   riskMap        String?
   logistique     String          @default("[]")
+  peloton        String?
   ressources     String          @default("{\"effectifTotal\":45,\"barrieres\":20}")
   runnerProfiles RunnerProfile[]
 }

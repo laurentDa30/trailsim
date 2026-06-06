@@ -20,6 +20,7 @@ interface SimulateRunnerProps {
     rainIntensity: number
     fog: boolean
     jamThreshold: number
+    peloton?: string | null
     runnerProfiles: RunnerProfile[]
   }
   races: {
@@ -114,6 +115,43 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
       Math.round(simulation.totalRunners / Math.max(1, races.length))
     )
 
+    // Per-race peloton config (effectif + archetype mix) saved from setup
+    type ArchLite = {
+      label: string
+      color: string
+      percentage: number
+      speedMin: number
+      speedMax: number
+      fatiguePlancher: number
+      techLevel: number
+      ravito: number
+      abandon: number
+    }
+    type RaceCfg = { totalRunners: number; archetypes: ArchLite[] }
+    let pelotonByRace: Record<string, RaceCfg> = {}
+    try {
+      if (simulation.peloton) pelotonByRace = JSON.parse(simulation.peloton) as Record<string, RaceCfg>
+    } catch {
+      pelotonByRace = {}
+    }
+    const archToProfiles = (archs: ArchLite[]): RunnerProfile[] =>
+      archs
+        .filter((a) => a.percentage > 0)
+        .map((a) => ({
+          id: a.label,
+          label: a.label,
+          percentage: a.percentage,
+          baseSpeedMin: a.speedMin,
+          baseSpeedMax: a.speedMax,
+          climbCoeff: 1.0,
+          descentCoeff: 1.0,
+          fatigueFactor: a.fatiguePlancher / 100,
+          techSkill: a.techLevel / 100,
+          ravitoDuration: a.ravito,
+          abandonRate: a.abandon / 100,
+          color: a.color,
+        }))
+
     const config: SimConfig = {
       simulationId: simulation.id,
       races: races.map((r) => {
@@ -124,15 +162,20 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
             return []
           }
         })()
+        // This race's own profiles + effectif when available
+        const rc = pelotonByRace[r.id]
+        let raceProfiles = rc?.archetypes ? archToProfiles(rc.archetypes) : []
+        if (raceProfiles.length === 0) raceProfiles = profilesPerRace
+        const raceTotal = rc?.totalRunners ?? runnersPerRace
         return {
           id: r.id,
           name: r.name,
           color: r.color,
           // startTime is stored in minutes (T+30 min); the engine works in seconds.
           startOffset: r.startTime * 60,
-          totalRunners: runnersPerRace,
+          totalRunners: raceTotal,
           gpxPoints,
-          profiles: profilesPerRace,
+          profiles: raceProfiles,
           // Narrow/technical sections become engine constraints (ravitos excluded)
           constraints: r.segments
             .filter((s) => s.type !== 'RAVITO')
