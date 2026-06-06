@@ -198,6 +198,23 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
     }))
   }
 
+  // Make this course a single-archetype peloton (100% this one, 0% the rest)
+  function setOnlyArchetype(raceId: string, archId: string) {
+    setConfigs((prev) => {
+      const cfg = prev[raceId] ?? defaultConfig()
+      return {
+        ...prev,
+        [raceId]: {
+          ...cfg,
+          archetypes: cfg.archetypes.map((a) => ({
+            ...a,
+            percentage: a.id === archId ? 100 : 0,
+          })),
+        },
+      }
+    })
+  }
+
   function updateArchetype(raceId: string, archId: string, updates: Partial<Archetype>) {
     setConfigs((prev) => {
       const cfg = prev[raceId] ?? defaultConfig()
@@ -411,8 +428,23 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
                           <td className="px-4 py-3 text-right text-[var(--color-ink-2)] tabular-nums">
                             {arch.percentage}%
                           </td>
-                          <td className="px-4 py-3 text-right text-[var(--color-ink-4)] tabular-nums">
-                            {count}
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-[var(--color-ink-4)]">{count}</span>
+                              <button
+                                type="button"
+                                onClick={() => setOnlyArchetype(activeRace.id, arch.id)}
+                                title="Course 100% ce profil (met les autres à 0%)"
+                                className="text-[10px] px-1.5 py-0.5 rounded transition-colors"
+                                style={{
+                                  border: '1px solid var(--color-line)',
+                                  color: 'var(--color-ink-3)',
+                                  background: 'var(--color-bg-2)',
+                                }}
+                              >
+                                100%
+                              </button>
+                            </div>
                           </td>
                         </tr>
                         {expanded && (

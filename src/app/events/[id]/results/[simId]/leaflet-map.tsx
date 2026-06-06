@@ -269,8 +269,8 @@ export default function LeafletMap({
 
   // Live density: bin on-course runners along each track at the current time
   const densityCircles = useMemo(() => {
-    if (!showDensity) return [] as { lat: number; lng: number; count: number }[]
-    const bins = new Map<string, { latSum: number; lngSum: number; count: number }>()
+    if (!showDensity) return [] as { lat: number; lng: number; count: number; color: string }[]
+    const bins = new Map<string, { latSum: number; lngSum: number; count: number; color: string }>()
     for (const r of runnersData) {
       if (!visibleRaces.has(r.raceId)) continue
       const pos = r.positions[timeIndex] ?? 0
@@ -280,16 +280,16 @@ export default function LeafletMap({
       const ll = latLngAtPosition(race.gpxPoints, pos)
       if (!ll) continue
       const key = `${r.raceId}:${Math.floor(pos * 60)}`
-      const e = bins.get(key) ?? { latSum: 0, lngSum: 0, count: 0 }
+      const e = bins.get(key) ?? { latSum: 0, lngSum: 0, count: 0, color: race.color }
       e.latSum += ll[0]
       e.lngSum += ll[1]
       e.count++
       bins.set(key, e)
     }
-    const out: { lat: number; lng: number; count: number }[] = []
+    const out: { lat: number; lng: number; count: number; color: string }[] = []
     for (const e of bins.values()) {
       if (e.count < 3) continue // only surface genuine crowding
-      out.push({ lat: e.latSum / e.count, lng: e.lngSum / e.count, count: e.count })
+      out.push({ lat: e.latSum / e.count, lng: e.lngSum / e.count, count: e.count, color: e.color })
     }
     return out
   }, [showDensity, runnersData, timeIndex, visibleRaces, racesById])
@@ -373,7 +373,7 @@ export default function LeafletMap({
       items.push({ lat: s.lat, lng: s.lng, r: 22, fill: '#A78BFA', alpha: 0.3, soft: true })
     // Live density — soft amber cloud where runners bunch up now
     for (const d of densityCircles)
-      items.push({ lat: d.lat, lng: d.lng, r: Math.min(42, 18 + d.count * 1.1), fill: '#F59E0B', alpha: 0.5, soft: true })
+      items.push({ lat: d.lat, lng: d.lng, r: Math.min(42, 18 + d.count * 1.1), fill: d.color, alpha: 0.5, soft: true })
     // Runners — crisp dots on top
     for (const rd of runnerDots)
       items.push({ lat: rd.lat, lng: rd.lng, r: 2.5, fill: rd.color, alpha: 0.85 })
