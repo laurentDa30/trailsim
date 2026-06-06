@@ -133,6 +133,14 @@ async function runSimulation(config: SimConfig): Promise<void> {
     // (densityFactor < 1 only happens when a section is over its capacity).
     const CONGEST_THRESHOLD = 0.95
 
+    // Harsh weather makes more runners abandon (and earlier). This is the most
+    // visible consequence of the conditions in the results.
+    let weatherAbandonMult = 1
+    if (weather.temperature > 22) weatherAbandonMult += (weather.temperature - 22) * 0.045
+    if (weather.temperature < 5) weatherAbandonMult += (5 - weather.temperature) * 0.03
+    if (weather.rain) weatherAbandonMult += weather.rainIntensity * 0.6
+    if (weather.fog) weatherAbandonMult += 0.1
+
     // For the last run, capture runner trajectories for output
     let lastRunTrajectories: Map<string, number[]> | null = null
 
@@ -150,8 +158,10 @@ async function runSimulation(config: SimConfig): Promise<void> {
       // Initialise runner states, keyed by runnerId
       const stateMap = new Map<string, RunnerState>()
       for (const runner of allRunners) {
-        // Decide up-front whether this runner DNFs, and where (30–95% of race)
-        const willAbandon = Math.random() < runner.abandonRate
+        // Decide up-front whether this runner DNFs, and where (30–95% of race).
+        // Harsh conditions raise the abandon probability.
+        const abandonProb = Math.min(0.9, runner.abandonRate * weatherAbandonMult)
+        const willAbandon = Math.random() < abandonProb
         stateMap.set(runner.id, {
           position: 0,
           distanceDone: 0,
@@ -268,15 +278,15 @@ async function runSimulation(config: SimConfig): Promise<void> {
               localCount += counts.get(si) ?? 0
             }
           }
-          // The tightest point along the local stretch limits the flow
-          let capacity = Infinity
+          // Capacity of the SAME ±5 window the runners were counted over
+          // (summing per-segment capacities) so the density ratio is comparable.
+          let capacity = 0
           for (let k = 0; k < 11; k++) {
             const si = segIdx - 5 + k
             if (si >= 0 && si < segmentCapacities.length) {
-              capacity = Math.min(capacity, segmentCapacities[si])
+              capacity += segmentCapacities[si]
             }
           }
-          if (!isFinite(capacity)) capacity = 1
           capacity = Math.max(1, capacity)
           const densityFactor = computeDensityFactor(localCount, capacity)
 

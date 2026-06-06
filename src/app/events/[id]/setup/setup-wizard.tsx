@@ -5,12 +5,17 @@ import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ZapIcon } from 'lucide-re
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Step1Courses, type Resources } from './step1-courses'
-import { Step2Peloton, type PelotonData } from './step2-peloton'
+import {
+  Step2Peloton,
+  buildInitialConfigs,
+  archetypesToPeloton,
+  type PelotonConfigs,
+} from './step2-peloton'
 import { Step3Conditions, type WeatherData } from './step3-conditions'
 import { Step4Constraints } from './step4-constraints'
 import { Topbar } from '@/components/layout/topbar'
 import type { PlacedLogi } from '@/lib/logistics'
-import type { Race, Segment, Simulation } from '@prisma/client'
+import type { Race, Segment, Simulation, RunnerProfile } from '@prisma/client'
 import { useRouter } from 'next/navigation'
 
 type Step = 1 | 2 | 3 | 4
@@ -24,10 +29,12 @@ const STEPS = [
 
 type RaceWithSegments = Race & { segments: Segment[] }
 
+type SimulationWithProfiles = Simulation & { runnerProfiles: RunnerProfile[] }
+
 interface SetupWizardProps {
   event: { id: string; name: string; location?: string | null }
   races: RaceWithSegments[]
-  simulation: Simulation | null
+  simulation: SimulationWithProfiles | null
 }
 
 export function SetupWizard({ event, races: initialRaces, simulation }: SetupWizardProps) {
@@ -66,7 +73,12 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
     return []
   })
 
-  const pelotonRef = useRef<PelotonData | null>(null)
+  // Peloton config is held here so it survives step navigation, and is
+  // restored from the last simulation's runner profiles.
+  const [pelotonConfigs, setPelotonConfigs] = useState<PelotonConfigs>(() =>
+    buildInitialConfigs(initialRaces, simulation?.runnerProfiles)
+  )
+
   const weatherRef = useRef<WeatherData>({
     temperature: simulation?.temperature ?? 18,
     wind: simulation?.wind ?? 0,
@@ -94,8 +106,8 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
       return
     }
 
-    const peloton = pelotonRef.current
-    if (!peloton || peloton.profiles.length === 0) {
+    const peloton = archetypesToPeloton(pelotonConfigs)
+    if (peloton.profiles.length === 0) {
       setLaunchError('Configurez le peloton (étape 2) avant de lancer la simulation.')
       setStep(2)
       return
@@ -218,10 +230,9 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           )}
           {step === 2 && (
             <Step2Peloton
-              eventId={event.id}
               races={races}
-              simulation={simulation}
-              onUpdate={(data) => { pelotonRef.current = data }}
+              configs={pelotonConfigs}
+              setConfigs={setPelotonConfigs}
             />
           )}
           {step === 3 && (

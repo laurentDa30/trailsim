@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ChevronRightIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
-import type { Race, Simulation } from '@prisma/client'
+import type { Race } from '@prisma/client'
 import type { RunnerProfile } from '@/lib/validators/simulation'
 
 export interface PelotonData {
@@ -12,7 +12,7 @@ export interface PelotonData {
   profiles: RunnerProfile[]
 }
 
-const DEFAULT_ARCHETYPES = [
+export const DEFAULT_ARCHETYPES = [
   {
     id: 'elite',
     label: 'Élite',
@@ -75,21 +75,64 @@ const DEFAULT_ARCHETYPES = [
   },
 ]
 
-type Archetype = typeof DEFAULT_ARCHETYPES[number]
+export type Archetype = typeof DEFAULT_ARCHETYPES[number]
 
-interface RaceConfig {
+export interface RaceConfig {
   totalRunners: number
   archetypes: Archetype[]
 }
 
-interface Step2PelotonProps {
-  eventId: string
-  races: Race[]
-  simulation: Simulation | null
-  onUpdate: (data: PelotonData) => void
+export type PelotonConfigs = Record<string, RaceConfig>
+
+interface SavedProfile {
+  label: string
+  color: string
+  percentage: number
+  baseSpeedMin: number
+  baseSpeedMax: number
+  fatigueFactor: number
+  techSkill: number
+  ravitoDuration: number
+  abandonRate: number
 }
 
-function archetypesToPeloton(configs: Record<string, RaceConfig>): PelotonData {
+/**
+ * Build the initial per-race peloton config — restored from a previously saved
+ * simulation's runner profiles when available, otherwise the defaults.
+ */
+export function buildInitialConfigs(
+  races: { id: string }[],
+  savedProfiles?: SavedProfile[] | null
+): PelotonConfigs {
+  const base: Archetype[] =
+    savedProfiles && savedProfiles.length > 0
+      ? savedProfiles.map((p, i) => ({
+          id: `saved-${i}`,
+          label: p.label,
+          color: p.color,
+          percentage: p.percentage,
+          speedMin: p.baseSpeedMin,
+          speedMax: p.baseSpeedMax,
+          fatiguePlancher: Math.round(p.fatigueFactor * 100),
+          techLevel: Math.round(p.techSkill * 100),
+          ravito: p.ravitoDuration,
+          abandon: Math.round(p.abandonRate * 100),
+        }))
+      : DEFAULT_ARCHETYPES.map((a) => ({ ...a }))
+  const init: PelotonConfigs = {}
+  races.forEach((r) => {
+    init[r.id] = { totalRunners: 100, archetypes: base.map((a) => ({ ...a })) }
+  })
+  return init
+}
+
+interface Step2PelotonProps {
+  races: Race[]
+  configs: PelotonConfigs
+  setConfigs: React.Dispatch<React.SetStateAction<PelotonConfigs>>
+}
+
+export function archetypesToPeloton(configs: Record<string, RaceConfig>): PelotonData {
   const all = Object.values(configs)
   const totalRunners = all.reduce((s, c) => s + c.totalRunners, 0)
   // The Simulation model holds one profile set; use the first race's archetypes.
@@ -112,40 +155,29 @@ function archetypesToPeloton(configs: Record<string, RaceConfig>): PelotonData {
   return { totalRunners: totalRunners || 100, profiles }
 }
 
-export function Step2Peloton({ races, onUpdate }: Step2PelotonProps) {
+export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) {
   const [activeTab, setActiveTab] = useState(0)
-  const [configs, setConfigs] = useState<Record<string, RaceConfig>>(() => {
-    const init: Record<string, RaceConfig> = {}
-    races.forEach((r) => {
-      init[r.id] = {
-        totalRunners: 100,
-        archetypes: DEFAULT_ARCHETYPES.map((a) => ({ ...a })),
-      }
-    })
-    return init
-  })
   const [expandedArchetypes, setExpandedArchetypes] = useState<Record<string, boolean>>({})
 
-  // Report the peloton configuration up to the wizard whenever it changes.
-  useEffect(() => {
-    onUpdate(archetypesToPeloton(configs))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configs])
+  const defaultConfig = (): RaceConfig => ({
+    totalRunners: 100,
+    archetypes: DEFAULT_ARCHETYPES.map((a) => ({ ...a })),
+  })
 
   const activeRace = races[activeTab]
-  const config = activeRace ? configs[activeRace.id] : null
-  const totalAll = Object.values(configs).reduce((s, c) => s + c.totalRunners, 0)
+  const config = activeRace ? configs[activeRace.id] ?? defaultConfig() : null
+  const totalAll = races.reduce((s, r) => s + (configs[r.id]?.totalRunners ?? 0), 0)
 
   function updateConfig(raceId: string, updates: Partial<RaceConfig>) {
     setConfigs((prev) => ({
       ...prev,
-      [raceId]: { ...prev[raceId], ...updates },
+      [raceId]: { ...(prev[raceId] ?? defaultConfig()), ...updates },
     }))
   }
 
   function updateArchetype(raceId: string, archId: string, updates: Partial<Archetype>) {
     setConfigs((prev) => {
-      const cfg = prev[raceId]
+      const cfg = prev[raceId] ?? defaultConfig()
       return {
         ...prev,
         [raceId]: {
@@ -159,13 +191,13 @@ export function Step2Peloton({ races, onUpdate }: Step2PelotonProps) {
   }
 
   function normalizeArchetypes(raceId: string) {
-    const cfg = configs[raceId]
+    const cfg = configs[raceId] ?? defaultConfig()
     const total = cfg.archetypes.reduce((s, a) => s + a.percentage, 0)
     if (total === 0) return
     setConfigs((prev) => ({
       ...prev,
       [raceId]: {
-        ...cfg,
+        ...(prev[raceId] ?? defaultConfig()),
         archetypes: cfg.archetypes.map((a) => ({
           ...a,
           percentage: Math.round((a.percentage / total) * 100),

@@ -19,6 +19,7 @@ export default async function SetupPage({ params }: PageProps) {
       simulations: {
         orderBy: { createdAt: "desc" },
         take: 1,
+        include: { runnerProfiles: true },
       },
     },
   })

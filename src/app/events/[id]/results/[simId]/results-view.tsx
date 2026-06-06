@@ -478,15 +478,17 @@ export function ResultsView({
     return isFinite(best) ? { seconds: best, raceId } : null
   }, [runnersData, rawTimestamps])
 
-  // DNF estimate: Σ runners(profile) × abandonRate, averaged over profiles
+  // DNF = runners who never reach the finish (they abandoned). Counted from the
+  // simulated trajectories, so it reflects the weather's effect on abandons.
   const dnfEstimate = useMemo(() => {
-    return Math.round(
-      runnerProfiles.reduce(
-        (sum, p) => sum + simulation.totalRunners * (p.percentage / 100) * p.abandonRate,
-        0
-      )
-    )
-  }, [runnerProfiles, simulation.totalRunners])
+    let dnf = 0
+    for (const r of runnersData) {
+      let maxPos = 0
+      for (const p of r.positions) if (p > maxPos) maxPos = p
+      if (maxPos < 0.999) dnf++
+    }
+    return dnf
+  }, [runnersData])
 
   // Peak runners on course across the whole timeline
   const peakOnCourse = useMemo(() => {
