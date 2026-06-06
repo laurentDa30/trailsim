@@ -26,18 +26,23 @@ interface Step4ConstraintsProps {
   races: RaceLike[]
   jamThreshold: number
   onJamThresholdChange: (v: number) => void
+  nRuns: number
+  onNRunsChange: (v: number) => void
   logistics: PlacedLogi[]
   onLogisticsChange: (l: PlacedLogi[]) => void
   resources: { effectif: number; barrieres: number }
 }
 
 const PERSONNEL_TYPES = ['signaleur', 'benevole', 'medical', 'chrono']
+const RUN_OPTIONS = [50, 100, 200, 300]
 
 export function Step4Constraints({
   eventId,
   races,
   jamThreshold,
   onJamThresholdChange,
+  nRuns,
+  onNRunsChange,
   logistics,
   onLogisticsChange,
   resources,
@@ -427,6 +432,42 @@ export function Step4Constraints({
             >
               +
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Number of Monte-Carlo runs (precision vs speed) */}
+      <div className="rounded-xl p-4" style={{ border: '1px solid var(--color-line)', background: 'var(--color-bg-1)' }}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+              Nombre de simulations (runs)
+            </h3>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-3)' }}>
+              Plus de runs = résultats plus stables (convergence ↑) mais calcul plus long.
+            </p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {RUN_OPTIONS.map((n) => {
+              const active = nRuns === n
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onNRunsChange(n)}
+                  className="px-2.5 py-1.5 rounded-lg text-sm font-mono tabular-nums transition-colors"
+                  style={{
+                    background: active ? 'var(--color-lime)' : 'var(--color-bg-2)',
+                    color: active ? '#ffffff' : 'var(--color-ink-3)',
+                    border: '1px solid',
+                    borderColor: active ? 'var(--color-lime)' : 'var(--color-line)',
+                    fontWeight: active ? 700 : 400,
+                  }}
+                >
+                  {n}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>

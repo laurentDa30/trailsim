@@ -20,6 +20,7 @@ interface SimulateRunnerProps {
     rainIntensity: number
     fog: boolean
     jamThreshold: number
+    nRuns?: number
     peloton?: string | null
     runnerProfiles: RunnerProfile[]
   }
@@ -207,7 +208,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
         fog: simulation.fog,
       },
       stepSeconds: 60,
-      nRuns: 100,
+      nRuns: simulation.nRuns && simulation.nRuns > 0 ? simulation.nRuns : 100,
       jamThreshold: simulation.jamThreshold,
     }
 
