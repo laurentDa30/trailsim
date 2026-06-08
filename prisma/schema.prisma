@@ -116,6 +116,10 @@ model Simulation {
   riskMap        String?
   logistique     String          @default("[]")
   peloton        String?
+  // Snapshot of the courses' départs at launch time (JSON: [{id,name,distance,startTime}]),
+  // so the history shows the start offsets THIS run actually used, even if the
+  // race.startTime is edited afterwards.
+  racesSnapshot  String?
   ressources     String          @default("{\"effectifTotal\":45,\"barrieres\":20}")
   runnerProfiles RunnerProfile[]
 }

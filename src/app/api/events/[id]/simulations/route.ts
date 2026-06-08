@@ -63,6 +63,15 @@ export async function POST(
 
     const { name, totalRunners, temperature, wind, windDirection, rain, rainIntensity, fog, jamThreshold, affluenceThreshold, nRuns, ressources, logistique, peloton, runnerProfiles } = parsed.data
 
+    // Snapshot the courses' départs as they are right now, so the history keeps
+    // the start offsets this run used even if race.startTime is changed later.
+    const racesNow = await db.race.findMany({
+      where: { eventId: id },
+      orderBy: { startTime: "asc" },
+      select: { id: true, name: true, distance: true, startTime: true, color: true },
+    })
+    const racesSnapshot = JSON.stringify(racesNow)
+
     const simulation = await db.simulation.create({
       data: {
         name,
@@ -77,6 +86,7 @@ export async function POST(
         jamThreshold,
         affluenceThreshold,
         nRuns,
+        racesSnapshot,
         ...(ressources !== undefined && { ressources }),
         ...(logistique !== undefined && { logistique }),
         ...(peloton !== undefined && { peloton }),
