@@ -150,6 +150,7 @@ interface LeafletMapProps {
     id: string
     name: string
     color: string
+    startTime: number
     gpxPoints: GPXPoint[]
   }[]
   riskMap: RiskMapEntry[]
@@ -160,6 +161,8 @@ interface LeafletMapProps {
   collisionWindows?: CollisionWindow[]
   runnersData?: RunnerData[]
   timeIndex?: number
+  /** Current playback time in seconds (since T0), for staging waiting waves. */
+  currentSec?: number
   showRunners?: boolean
   showZones?: boolean
   showShared?: boolean
@@ -254,6 +257,7 @@ export default function LeafletMap({
   collisionWindows = [],
   runnersData = [],
   timeIndex = 0,
+  currentSec,
   showRunners = true,
   showZones = true,
   showShared = true,
@@ -371,6 +375,33 @@ export default function LeafletMap({
     return out
   }, [showRunners, runnersData, timeIndex, visibleRaces, racesById])
 
+  // Runners of a wave that hasn't started yet: staged at their start line so
+  // a staggered départ is visible (they wait, then release at T+offset)
+  // instead of popping in from nowhere. A wave is "waiting" purely from the
+  // clock vs its start offset, so this needs no engine data and works on any
+  // existing result. A small phyllotaxis spread avoids one dot on top of all.
+  const stagedDots = useMemo(() => {
+    if (!showRunners || currentSec == null) return [] as { lat: number; lng: number; color: string }[]
+    const out: { lat: number; lng: number; color: string }[] = []
+    for (const r of runnersData) {
+      if (!visibleRaces.has(r.raceId)) continue
+      const race = racesById.get(r.raceId)
+      if (!race || race.gpxPoints.length < 1) continue
+      const startSec = race.startTime * 60
+      if (currentSec >= startSec) continue // already released
+      const sp = race.gpxPoints[0]
+      const i = out.length
+      const ang = i * 2.399963 // golden angle
+      const rad = Math.sqrt(i) * 0.000035 // ~3-4 m per ring
+      out.push({
+        lat: sp.lat + rad * Math.cos(ang),
+        lng: sp.lng + rad * Math.sin(ang),
+        color: race.color,
+      })
+    }
+    return out
+  }, [showRunners, currentSec, runnersData, visibleRaces, racesById])
+
   // Combined draw list for the canvas overlay (bottom → top)
   const canvasItems = useMemo<DrawItem[]>(() => {
     const items: DrawItem[] = []
@@ -383,6 +414,17 @@ export default function LeafletMap({
     // Live density — soft amber cloud where runners bunch up now
     for (const d of densityCircles)
       items.push({ lat: d.lat, lng: d.lng, r: Math.min(42, 18 + d.count * 1.1), fill: d.color, alpha: 0.5, soft: true })
+    // Waiting waves — faded hollow dots staged at the start line
+    for (const sd of stagedDots)
+      items.push({
+        lat: sd.lat,
+        lng: sd.lng,
+        r: 3,
+        fill: sd.color,
+        alpha: 0.32,
+        stroke: sd.color,
+        strokeWidth: 1,
+      })
     // Runners — crisp dots on top, with a light outline so they pop
     for (const rd of runnerDots)
       items.push({
@@ -395,7 +437,7 @@ export default function LeafletMap({
         strokeWidth: 1.3,
       })
     return items
-  }, [heatPoints, sharedPoints, densityCircles, runnerDots])
+  }, [heatPoints, sharedPoints, densityCircles, runnerDots, stagedDots])
 
   // Collision markers (where two courses meet), placed on the first race's point
   const collisionMarkers = useMemo(() => {
