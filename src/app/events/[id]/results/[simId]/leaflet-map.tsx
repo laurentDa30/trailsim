@@ -542,9 +542,14 @@ export default function LeafletMap({
               >
                 <Tooltip>
                   <span>
-                    Rencontre : {m.names}
+                    Rencontre probable : {m.names}
                     <br />
-                    {h(m.cw.tStart)} → {h(m.cw.tEnd)} · jusqu&apos;à {Math.round(m.cw.peak)} coureurs
+                    Possible de {h(m.cw.tStart)} à {h(m.cw.tEnd)} · pic ~{Math.round(m.cw.peak)} coureurs
+                    <br />
+                    <em style={{ opacity: 0.8 }}>
+                      Plage de probabilité (toutes les simulations). Les coureurs animés ne
+                      montrent qu&apos;un scénario : ils peuvent se croiser plus tard dans la plage.
+                    </em>
                   </span>
                 </Tooltip>
               </CircleMarker>

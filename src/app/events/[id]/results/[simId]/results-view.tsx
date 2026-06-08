@@ -1011,6 +1011,17 @@ export function ResultsView({
                 p. ex. les premiers d&apos;une course partie en différé rattrapant les derniers de la
                 précédente (le départ est exclu).
               </p>
+              {races.length >= 2 && collisionWindows.length > 0 && (
+                <p
+                  className="text-[10.5px] leading-relaxed px-2 py-1.5 rounded-md"
+                  style={{ color: 'var(--color-ink-3)', background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}
+                >
+                  ⓘ Ces plages sont <strong>probabilistes</strong> : calculées sur l&apos;ensemble des
+                  simulations, elles s&apos;ouvrent dès que la rencontre devient possible. Le timelapse
+                  n&apos;affiche <strong>qu&apos;un seul scénario</strong> — les coureurs visibles peuvent
+                  donc se croiser <strong>plus tard</strong> à l&apos;intérieur de la plage.
+                </p>
+              )}
 
               {races.length < 2 && (
                 <p className="text-xs px-1 py-2" style={{ color: 'var(--color-ink-4)' }}>
@@ -1067,7 +1078,7 @@ export function ResultsView({
                     {/* When */}
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
-                        Contact
+                        Plage probable
                       </span>
                       <span className="text-xs font-mono" style={{ color: 'var(--color-ink-2)' }}>
                         {formatTimeHHMM(cw.tStart)}
