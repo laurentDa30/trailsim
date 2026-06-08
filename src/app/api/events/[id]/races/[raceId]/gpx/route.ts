@@ -111,6 +111,9 @@ export async function POST(
       elevGain: updated.elevGain,
       elevLoss: updated.elevLoss,
       pointCount: points.length,
+      // Return the parsed track so the client state (and downstream steps such as
+      // the constraints map) can render the trace without a full page reload.
+      gpxPoints: updated.gpxPoints,
     })
   } catch (error) {
     console.error("[POST /api/events/[id]/races/[raceId]/gpx]", error)

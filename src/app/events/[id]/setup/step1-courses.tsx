@@ -170,12 +170,21 @@ export function Step1Courses({
         body: fd,
       })
       if (res.ok) {
-        const stats = await res.json()
+        const { gpxPoints, ...stats } = (await res.json()) as {
+          distance: number
+          elevGain: number
+          elevLoss: number
+          pointCount: number
+          gpxPoints?: string
+        }
         setGpxStates((s) => ({ ...s, [raceId]: { status: 'done', stats } }))
         updateRace(raceId, {
           distance: stats.distance,
           elevGain: stats.elevGain,
           elevLoss: stats.elevLoss,
+          // Carry the parsed track into client state so the constraints map
+          // (step 4) shows it immediately, without a page reload.
+          ...(gpxPoints ? { gpxPoints } : {}),
         })
       } else {
         setGpxStates((s) => ({ ...s, [raceId]: { status: 'error', error: 'Erreur upload' } }))
