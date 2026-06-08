@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { ElevationProfile } from './elevation-profile'
 import { Timeline } from './timeline'
 import { Topbar } from '@/components/layout/topbar'
@@ -26,6 +27,8 @@ import {
   Trash2Icon,
   XIcon,
   LayersIcon,
+  SlidersHorizontalIcon,
+  RotateCcwIcon,
 } from 'lucide-react'
 import { RiskBadge } from '@/components/layout/risk-badge'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
@@ -46,6 +49,8 @@ export interface ResultsViewProps {
     rain: boolean
     fog: boolean
     logistique?: string
+    nRuns?: number
+    racesSnapshot?: string | null
   }
   result: CompressedSimulationResult | null
   races: {
@@ -63,6 +68,8 @@ export interface ResultsViewProps {
     color: string
     percentage: number
     abandonRate: number
+    baseSpeedMin?: number
+    baseSpeedMax?: number
   }[]
 }
 
@@ -269,6 +276,7 @@ export function ResultsView({
   simulation,
   result,
   races,
+  runnerProfiles,
 }: ResultsViewProps) {
   const [visibleRaces, setVisibleRaces] = useState<Set<string>>(
     () => new Set(races.map((r) => r.id))
@@ -840,6 +848,89 @@ export function ResultsView({
                 </div>
               </div>
             )}
+          </Section>
+
+          {/* CONFIG UTILISÉE section — what THIS result was computed with */}
+          <Section icon={<SlidersHorizontalIcon size={12} />} label="Config utilisée" defaultOpen={false}>
+            <div className="p-3 flex flex-col gap-3">
+              <p className="text-[11px] leading-relaxed" style={{ color: 'var(--color-ink-4)' }}>
+                Réglages figés au lancement de ce résultat. Pour en changer, lancez une nouvelle
+                simulation depuis la configuration.
+              </p>
+
+              {/* Départs (faithful snapshot when available) */}
+              {(() => {
+                let snap: { id: string; name: string; startTime: number; color?: string }[] = []
+                try {
+                  if (simulation.racesSnapshot) snap = JSON.parse(simulation.racesSnapshot)
+                } catch {
+                  snap = []
+                }
+                const fromSnap = snap.length > 0
+                const list = fromSnap
+                  ? snap
+                  : races.map((r) => ({ id: r.id, name: r.name, startTime: r.startTime, color: r.color }))
+                return (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+                      Départs{fromSnap ? '' : ' (actuels — run antérieur au suivi)'}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {list.map((r) => (
+                        <span
+                          key={r.id}
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px]"
+                          style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ background: r.color ?? 'var(--color-ink-4)' }} />
+                          {r.name}
+                          <span style={{ color: 'var(--color-ink-4)' }}>· {r.startTime ? `T+${r.startTime} min` : 'T0'}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Key scalars */}
+              <div className="grid grid-cols-2 gap-2">
+                {(() => {
+                  const lo = runnerProfiles.length
+                    ? Math.min(...runnerProfiles.map((p) => p.baseSpeedMin ?? Infinity))
+                    : Infinity
+                  const hi = runnerProfiles.length
+                    ? Math.max(...runnerProfiles.map((p) => p.baseSpeedMax ?? -Infinity))
+                    : -Infinity
+                  const speed = isFinite(lo) && isFinite(hi) ? `${lo}–${hi} km/h` : '—'
+                  const weather =
+                    `${Math.round(simulation.temperature)}°C` +
+                    (simulation.wind > 0 ? ` · vent ${Math.round(simulation.wind)}` : '') +
+                    (simulation.rain ? ' · pluie' : '') +
+                    (simulation.fog ? ' · brouillard' : '')
+                  const rows: [string, string][] = [
+                    ['Vitesses', speed],
+                    ['Coureurs', String(simulation.totalRunners)],
+                    ['Météo', weather],
+                    ['Runs', String(simulation.nRuns ?? '—')],
+                  ]
+                  return rows.map(([k, v]) => (
+                    <div key={k} className="rounded-lg px-2.5 py-1.5" style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}>
+                      <div className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>{k}</div>
+                      <div className="text-[11px] font-mono" style={{ color: 'var(--color-ink-2)' }}>{v}</div>
+                    </div>
+                  ))
+                })()}
+              </div>
+
+              <Link
+                href={`/events/${event.id}/setup`}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
+                style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+              >
+                <RotateCcwIcon size={13} />
+                Relancer une simulation
+              </Link>
+            </div>
           </Section>
 
           {/* COURSES section */}

@@ -54,6 +54,7 @@ export default async function SimulatePage({ params }: PageProps) {
   const sim = {
     id: simulation.id,
     name: simulation.name,
+    status: simulation.status,
     totalRunners: simulation.totalRunners,
     temperature: simulation.temperature,
     wind: simulation.wind,

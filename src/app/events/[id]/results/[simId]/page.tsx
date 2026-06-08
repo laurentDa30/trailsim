@@ -75,6 +75,8 @@ export default async function ResultsPage({ params }: PageProps) {
         rain: simulation.rain,
         fog: simulation.fog,
         logistique: simulation.logistique,
+        nRuns: simulation.nRuns,
+        racesSnapshot: simulation.racesSnapshot,
       }}
       result={result}
       races={parsedRaces}
@@ -84,6 +86,8 @@ export default async function ResultsPage({ params }: PageProps) {
         color: p.color,
         percentage: p.percentage,
         abandonRate: p.abandonRate,
+        baseSpeedMin: p.baseSpeedMin,
+        baseSpeedMax: p.baseSpeedMax,
       }))}
     />
   )

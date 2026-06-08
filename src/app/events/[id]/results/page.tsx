@@ -12,6 +12,7 @@ import {
   FlagIcon,
   UsersIcon,
   ChevronRightIcon,
+  GitCompareIcon,
 } from 'lucide-react'
 
 interface PageProps {
@@ -83,14 +84,26 @@ export default async function SimulationsHistoryPage({ params }: PageProps) {
               nouvelle config, lancez une nouvelle simulation depuis la configuration.
             </p>
           </div>
-          <Link
-            href={`/events/${event.id}/setup`}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium shrink-0 transition-colors"
-            style={{ background: 'var(--color-lime)', color: '#fff' }}
-          >
-            <PlusIcon size={15} />
-            Nouvelle simulation
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {sims.filter((s) => s.status === 'DONE').length >= 2 && (
+              <Link
+                href={`/events/${event.id}/results/compare`}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors"
+                style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+              >
+                <GitCompareIcon size={15} />
+                Comparer
+              </Link>
+            )}
+            <Link
+              href={`/events/${event.id}/setup`}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: 'var(--color-lime)', color: '#fff' }}
+            >
+              <PlusIcon size={15} />
+              Nouvelle simulation
+            </Link>
+          </div>
         </div>
 
         {sims.length === 0 ? (

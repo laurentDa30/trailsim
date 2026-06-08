@@ -13,6 +13,7 @@ interface SimulateRunnerProps {
   simulation: {
     id: string
     name: string
+    status: string
     totalRunners: number
     temperature: number
     wind: number
@@ -86,14 +87,19 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
   const { state, run } = useSimulation()
   const logEndRef = useRef<HTMLDivElement>(null)
   const [resultSaved, setResultSaved] = useState(false)
+  // A simulation already computed in a previous session must NOT recompute just
+  // because the user clicked "Simulation" in the nav — only a fresh (PENDING)
+  // run auto-starts. `started` flips when a run is launched this session.
+  const alreadyComputed = simulation.status === 'DONE'
+  const [started, setStarted] = useState(!alreadyComputed)
 
   // Auto-scroll log
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [state.logs])
 
-  // Build config and run on mount
-  useEffect(() => {
+  // Build the engine config + log from the stored configuration.
+  function buildRun(): { config: SimConfig; logLines: string[] } {
     const profilesPerRace = simulation.runnerProfiles.length > 0
       ? simulation.runnerProfiles
       : [
@@ -238,7 +244,21 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
       ),
     })
 
+    return { config, logLines }
+  }
+
+  function startRun() {
+    setStarted(true)
+    const { config, logLines } = buildRun()
     run(config, logLines)
+  }
+
+  // Auto-run only a fresh (PENDING) simulation; never recompute a DONE one.
+  useEffect(() => {
+    if (!alreadyComputed) {
+      const { config, logLines } = buildRun()
+      run(config, logLines)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save result when done
@@ -269,6 +289,73 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
     if (s <= 0) return '—'
     if (s < 60) return `${s}s`
     return `${Math.floor(s / 60)}m ${s % 60}s`
+  }
+
+  const SimHeader = (
+    <header
+      className="flex items-center gap-3 px-6 shrink-0"
+      style={{ height: 52, background: 'var(--color-bg-1)', borderBottom: '1px solid var(--color-line)' }}
+    >
+      <svg width={22} height={22} viewBox="0 0 22 22" fill="none">
+        <polyline
+          points="2,18 6,10 10,14 14,5 18,9 20,7"
+          stroke="var(--color-lime)"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span className="font-semibold text-sm" style={{ color: 'var(--color-ink)' }}>TrailSim</span>
+      <span className="w-px h-4 shrink-0" style={{ background: 'var(--color-line)' }} />
+      <span className="text-sm truncate" style={{ color: 'var(--color-ink-3)' }}>{event.name}</span>
+    </header>
+  )
+
+  // Navigated to a simulation that's already computed → don't recompute.
+  // Show its status with explicit choices instead.
+  if (alreadyComputed && !started) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
+        {SimHeader}
+        <main className="flex-1 flex items-center justify-center px-6 py-10">
+          <div
+            className="w-full max-w-md rounded-2xl p-6 text-center"
+            style={{ border: '1px solid var(--color-line)', background: 'var(--color-bg-1)' }}
+          >
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium mb-4"
+              style={{ background: 'color-mix(in srgb, var(--color-safe) 12%, transparent)', color: 'var(--color-safe)' }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-safe)' }} />
+              Déjà calculée
+            </span>
+            <h1 className="text-lg font-semibold" style={{ color: 'var(--color-ink)' }}>
+              {simulation.name}
+            </h1>
+            <p className="text-sm mt-2 mb-5" style={{ color: 'var(--color-ink-3)' }}>
+              Cette simulation est déjà calculée — la rouvrir ne relance pas le calcul. Consultez son
+              résultat, ou lancez une nouvelle simulation depuis la configuration pour tester d&apos;autres réglages.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" asChild>
+                <Link href={`/events/${event.id}/results/${simulation.id}`}>Voir les résultats →</Link>
+              </Button>
+              <Button variant="ghost" asChild>
+                <Link href={`/events/${event.id}/setup`}>Nouvelle simulation (config)</Link>
+              </Button>
+              <button
+                type="button"
+                onClick={startRun}
+                className="text-xs mt-1 transition-colors"
+                style={{ color: 'var(--color-ink-4)' }}
+              >
+                Relancer ce calcul à l&apos;identique
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (
