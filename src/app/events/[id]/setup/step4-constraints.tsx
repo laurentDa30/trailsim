@@ -26,6 +26,8 @@ interface Step4ConstraintsProps {
   races: RaceLike[]
   jamThreshold: number
   onJamThresholdChange: (v: number) => void
+  affluenceThreshold: number
+  onAffluenceThresholdChange: (v: number) => void
   nRuns: number
   onNRunsChange: (v: number) => void
   logistics: PlacedLogi[]
@@ -42,6 +44,8 @@ export function Step4Constraints({
   races,
   jamThreshold,
   onJamThresholdChange,
+  affluenceThreshold,
+  onAffluenceThresholdChange,
   nRuns,
   onNRunsChange,
   logistics,
@@ -469,6 +473,42 @@ export function Step4Constraints({
             <button
               type="button"
               onClick={() => onJamThresholdChange(Math.min(100, jamThreshold + 1))}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
+              style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Affluence threshold */}
+      <div className="rounded-xl p-4" style={{ border: '1px solid var(--color-line)', background: 'var(--color-bg-1)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+              Seuil d&apos;affluence
+            </h3>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-3)' }}>
+              Coureurs concentrés sur ~150 m pour signaler une zone d&apos;affluence (même sans
+              blocage).
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => onAffluenceThresholdChange(Math.max(5, affluenceThreshold - 5))}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
+              style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+            >
+              −
+            </button>
+            <span className="w-12 text-center font-mono text-lg font-bold tabular-nums" style={{ color: 'var(--color-warning)' }}>
+              {affluenceThreshold}
+            </span>
+            <button
+              type="button"
+              onClick={() => onAffluenceThresholdChange(Math.min(200, affluenceThreshold + 5))}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
               style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
             >

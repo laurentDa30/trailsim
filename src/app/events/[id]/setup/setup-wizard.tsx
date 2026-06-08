@@ -63,6 +63,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   })
 
   const [jamThreshold, setJamThreshold] = useState<number>(simulation?.jamThreshold ?? 10)
+  const [affluenceThreshold, setAffluenceThreshold] = useState<number>(simulation?.affluenceThreshold ?? 15)
   const [nRuns, setNRuns] = useState<number>(simulation?.nRuns ?? 100)
 
   const [logistics, setLogistics] = useState<PlacedLogi[]>(() => {
@@ -169,6 +170,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           rainIntensity: weather.rainIntensity,
           fog: weather.fog,
           jamThreshold,
+          affluenceThreshold,
           nRuns,
           runnerProfiles: peloton.profiles,
           peloton: JSON.stringify(pelotonConfigs),
@@ -277,6 +279,8 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               races={races}
               jamThreshold={jamThreshold}
               onJamThresholdChange={setJamThreshold}
+              affluenceThreshold={affluenceThreshold}
+              onAffluenceThresholdChange={setAffluenceThreshold}
               nRuns={nRuns}
               onNRunsChange={setNRuns}
               logistics={logistics}

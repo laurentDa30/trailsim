@@ -27,6 +27,7 @@ export const SimulationCreateSchema = z.object({
   rainIntensity: z.number().min(0).max(100).default(0),
   fog: z.boolean().default(false),
   jamThreshold: z.number().int().min(2).max(100).default(10),
+  affluenceThreshold: z.number().int().min(5).max(200).default(15),
   nRuns: z.number().int().min(20).max(300).default(100),
   ressources: z.string().optional(),
   logistique: z.string().optional(),

@@ -79,6 +79,7 @@ interface ClusteredRisk {
   jamProbability: number
   peakDensity: number
   dist: number
+  kind: 'bouchon' | 'affluence'
 }
 
 /**
@@ -87,7 +88,7 @@ interface ClusteredRisk {
  * Group consecutive entries (per race, within `gapKm`) and keep the worst one.
  */
 function clusterRiskZones(
-  entries: { raceId: string; segmentIndex: number; riskScore: number; jamProbability: number; peakDensity: number }[],
+  entries: { raceId: string; segmentIndex: number; riskScore: number; jamProbability: number; peakDensity: number; kind?: 'bouchon' | 'affluence' }[],
   races: { id: string; gpxPoints: GPXPoint[] }[],
   gapKm = 0.4
 ): ClusteredRisk[] {
@@ -96,7 +97,7 @@ function clusterRiskZones(
     const race = races.find((r) => r.id === e.raceId)
     const dist = race?.gpxPoints[e.segmentIndex]?.dist ?? 0
     if (!byRace.has(e.raceId)) byRace.set(e.raceId, [])
-    byRace.get(e.raceId)!.push({ ...e, dist })
+    byRace.get(e.raceId)!.push({ ...e, dist, kind: e.kind ?? 'affluence' })
   }
 
   const out: ClusteredRisk[] = []
@@ -110,6 +111,8 @@ function clusterRiskZones(
         ...best,
         peakDensity: Math.max(...cluster.map((c) => c.peakDensity)),
         jamProbability: Math.max(...cluster.map((c) => c.jamProbability)),
+        // Bouchon takes priority if any sub-segment in the cluster is one
+        kind: cluster.some((c) => c.kind === 'bouchon') ? 'bouchon' : 'affluence',
       })
       cluster = []
     }
@@ -925,6 +928,18 @@ export function ResultsView({
                           km {dist.toFixed(1)}
                         </span>
                       </span>
+                      <span
+                        className="text-[9px] font-semibold px-1 py-0.5 rounded shrink-0"
+                        style={{
+                          background:
+                            entry.kind === 'bouchon'
+                              ? 'color-mix(in srgb, var(--color-danger) 18%, transparent)'
+                              : 'color-mix(in srgb, var(--color-warning) 18%, transparent)',
+                          color: entry.kind === 'bouchon' ? 'var(--color-danger)' : 'var(--color-warning)',
+                        }}
+                      >
+                        {entry.kind === 'bouchon' ? 'Bouchon' : 'Affluence'}
+                      </span>
                       {hasCollision && (
                         <span
                           className="flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded"
@@ -953,13 +968,15 @@ export function ResultsView({
                         />
                       </div>
                       <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--color-ink-4)' }}>
-                        {entry.peakDensity.toFixed(0)} crs
+                        {entry.peakDensity.toFixed(0)} crs/150m
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-mono" style={{ color: 'var(--color-ink-4)' }}>
-                        Bouchon {Math.round(entry.jamProbability * 100)}%
+                        {entry.kind === 'bouchon'
+                          ? `Bloqué ${Math.round(entry.jamProbability * 100)}% du temps`
+                          : 'Forte concentration (fluide)'}
                       </span>
                       <button
                         type="button"

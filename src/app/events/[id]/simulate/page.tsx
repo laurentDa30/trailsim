@@ -62,6 +62,7 @@ export default async function SimulatePage({ params }: PageProps) {
     rainIntensity: simulation.rainIntensity,
     fog: simulation.fog,
     jamThreshold: simulation.jamThreshold,
+    affluenceThreshold: simulation.affluenceThreshold,
     nRuns: simulation.nRuns,
     peloton: simulation.peloton,
     runnerProfiles: simulation.runnerProfiles,

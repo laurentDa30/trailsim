@@ -39,6 +39,8 @@ async function runSimulation(config: SimConfig): Promise<void> {
   try {
     const { races, weather, stepSeconds, nRuns, simulationId } = config
     const JAM_RUNNERS = config.jamThreshold && config.jamThreshold > 0 ? config.jamThreshold : 10
+    const AFFLUENCE_THRESHOLD =
+      config.affluenceThreshold && config.affluenceThreshold > 0 ? config.affluenceThreshold : 15
 
     if (races.length === 0) {
       self.postMessage({ type: "ERROR", message: "No races configured" } satisfies WorkerMessage)
@@ -442,16 +444,16 @@ async function runSimulation(config: SimConfig): Promise<void> {
           if (d > 0.5) activeTime++
           if (c >= JAM_RUNNERS) jamTime++
         }
-        // Only surface bins that actually congest (forming or full bouchon)
-        if (peakCongested < JAM_RUNNERS / 2) continue
+        // A zone is flagged if it congests (bouchon) OR if raw crowding is high
+        // (affluence hotspot), even on a wide section that still flows.
+        const isJam = peakCongested >= JAM_RUNNERS / 2
+        const isAffluence = peakDensity >= AFFLUENCE_THRESHOLD
+        if (!isJam && !isAffluence) continue
 
-        // Probability the section is a genuine bouchon while runners are on it
         const jamProbability = activeTime > 0 ? jamTime / activeTime : 0
-        // Risk scales with how big the jam gets and how persistent it is
-        const riskScore = Math.min(
-          1.0,
-          (peakCongested / 25) * 0.6 + jamProbability * 0.4
-        )
+        const jamScore = (peakCongested / 25) * 0.6 + jamProbability * 0.4
+        const affScore = Math.min(1, peakDensity / (AFFLUENCE_THRESHOLD * 2.5))
+        const riskScore = Math.min(1.0, Math.max(isJam ? jamScore : 0, isAffluence ? affScore : 0))
 
         riskMap.push({
           raceId: race.id,
@@ -459,6 +461,8 @@ async function runSimulation(config: SimConfig): Promise<void> {
           riskScore,
           jamProbability,
           peakDensity,
+          // Bouchon (blocked) takes priority over a free-flowing crowd
+          kind: isJam ? 'bouchon' : 'affluence',
         })
       }
     }

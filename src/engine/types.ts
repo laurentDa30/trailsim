@@ -80,7 +80,8 @@ export interface SimConfig {
   }
   stepSeconds: number
   nRuns: number
-  jamThreshold?: number  // runners that make a bouchon (default 10)
+  jamThreshold?: number       // runners that make a bouchon (default 10)
+  affluenceThreshold?: number // runners/150m that flag an affluence hotspot (default 15)
 }
 
 export interface RiskMapEntry {
@@ -89,6 +90,7 @@ export interface RiskMapEntry {
   riskScore: number
   jamProbability: number
   peakDensity: number
+  kind?: 'bouchon' | 'affluence'
 }
 
 export interface CompressedSimulationResult {

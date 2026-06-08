@@ -110,6 +110,7 @@ model Simulation {
   rainIntensity  Float           @default(0.0)
   fog            Boolean         @default(false)
   jamThreshold   Int             @default(10)
+  affluenceThreshold Int         @default(15)
   nRuns          Int             @default(100)
   resultSnapshot String?
   riskMap        String?
