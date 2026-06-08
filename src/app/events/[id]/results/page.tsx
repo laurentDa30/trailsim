@@ -13,6 +13,8 @@ import {
   UsersIcon,
   ChevronRightIcon,
   GitCompareIcon,
+  FileTextIcon,
+  MapIcon,
 } from 'lucide-react'
 
 interface PageProps {
@@ -204,13 +206,35 @@ export default async function SimulationsHistoryPage({ params }: PageProps) {
                     </div>
                   )}
 
-                  {/* Action */}
-                  <div className="flex items-center justify-end mt-3">
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-2 mt-3 flex-wrap">
                     {isDone ? (
-                      <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--color-lime)' }}>
-                        Voir le résultat
-                        <ChevronRightIcon size={14} />
-                      </span>
+                      <>
+                        <Link
+                          href={`/events/${event.id}/report/${sim.id}`}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                          style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+                        >
+                          <FileTextIcon size={13} />
+                          Rapport PDF
+                        </Link>
+                        <Link
+                          href={`/events/${event.id}/terrain/${sim.id}`}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                          style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+                        >
+                          <MapIcon size={13} />
+                          Plan terrain
+                        </Link>
+                        <Link
+                          href={`/events/${event.id}/results/${sim.id}`}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                          style={{ background: 'var(--color-lime)', color: '#fff' }}
+                        >
+                          Voir le résultat
+                          <ChevronRightIcon size={14} />
+                        </Link>
+                      </>
                     ) : (
                       <span className="text-xs" style={{ color: 'var(--color-ink-4)' }}>
                         {sim.status === 'ERROR' ? 'Échec du calcul' : 'Calcul en cours…'}
@@ -220,13 +244,7 @@ export default async function SimulationsHistoryPage({ params }: PageProps) {
                 </div>
               )
 
-              return isDone ? (
-                <Link key={sim.id} href={`/events/${event.id}/results/${sim.id}`} className="block hover:opacity-95">
-                  {card}
-                </Link>
-              ) : (
-                <div key={sim.id}>{card}</div>
-              )
+              return <div key={sim.id}>{card}</div>
             })}
           </div>
         )}

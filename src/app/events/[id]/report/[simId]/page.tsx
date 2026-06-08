@@ -1,12 +1,20 @@
 import { notFound } from 'next/navigation'
 import db from '@/lib/db'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
+import {
+  clusterRiskZones,
+  computePerRaceStats,
+  computeRecommendations,
+  type RaceLite,
+} from '@/lib/report-metrics'
+import { OperationalMap, type OpMapRace, type OpMapZone } from './operational-map'
+import { ReportToolbar } from './report-toolbar'
 
 interface PageProps {
   params: Promise<{ id: string; simId: string }>
 }
 
-function fmtTime(s: number) {
+function fmtClock(s: number) {
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   return `${h}h${String(m).padStart(2, '0')}`
@@ -17,10 +25,14 @@ function fmtDate(d: Date | null | undefined): string {
   return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(d))
 }
 
-function scoreColor(score: number): string {
-  if (score >= 80) return '#DC2626'
-  if (score >= 60) return '#D97706'
-  return '#16A34A'
+/** Cap a polyline to ~maxPts points for a lightweight SVG, keeping ends. */
+function downsample<T>(arr: T[], maxPts = 400): T[] {
+  if (arr.length <= maxPts) return arr
+  const step = Math.ceil(arr.length / maxPts)
+  const out: T[] = []
+  for (let i = 0; i < arr.length; i += step) out.push(arr[i])
+  if (out[out.length - 1] !== arr[arr.length - 1]) out.push(arr[arr.length - 1])
+  return out
 }
 
 export default async function ReportPage({ params }: PageProps) {
@@ -33,7 +45,10 @@ export default async function ReportPage({ params }: PageProps) {
 
   if (!sim) notFound()
 
-  const races = await db.race.findMany({ where: { eventId: id } })
+  const races = await db.race.findMany({
+    where: { eventId: id },
+    include: { segments: true },
+  })
 
   let result: CompressedSimulationResult | null = null
   if (sim.resultSnapshot) {
@@ -44,7 +59,6 @@ export default async function ReportPage({ params }: PageProps) {
     }
   }
 
-  // Parse gpxPoints for all races
   const parsedRaces = races.map((race) => {
     let gpxPoints: GPXPoint[] = []
     try {
@@ -55,100 +69,97 @@ export default async function ReportPage({ params }: PageProps) {
     return { ...race, gpxPoints }
   })
 
-  // Risk zones sorted by score (top 10)
-  const riskZones = result
-    ? [...result.riskMap].sort((a, b) => b.riskScore - a.riskScore).slice(0, 10)
-    : []
+  const racesLite: RaceLite[] = parsedRaces.map((r) => ({
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    gpxPoints: r.gpxPoints,
+  }))
 
-  // Stats
-  const totalRunners = sim.totalRunners
-  const totalCourses = races.length
-  const riskZoneCount = riskZones.length
-  const avgAbandon =
-    sim.runnerProfiles.length > 0
-      ? (
-          sim.runnerProfiles.reduce((acc, p) => acc + p.abandonRate * p.percentage, 0) /
-          sim.runnerProfiles.reduce((acc, p) => acc + p.percentage, 0)
-        ).toFixed(1)
-      : '—'
+  // ── Derived metrics ──
+  const clustered = result ? clusterRiskZones(result.riskMap, racesLite) : []
+  const perRace = result ? computePerRaceStats(result, racesLite, clustered) : []
+  const recommendations = result ? computeRecommendations(result, racesLite, clustered, perRace) : []
 
-  const printStyles = `
-    @media print {
-      body { background: white; }
-      .no-print { display: none !important; }
-      .page-break { page-break-before: always; }
-    }
-  `
+  const bouchons = [...clustered].sort((a, b) => b.riskScore - a.riskScore)
+  const collisionWindows = result?.collisionWindows ?? []
+
+  // Global headline figures
+  const firstFinish = perRace
+    .filter((s) => s.finishSec != null)
+    .sort((a, b) => (a.finishSec! - b.finishSec!))[0]
+  const dnfTotal = perRace.reduce((acc, s) => acc + s.dnf, 0)
+  const maxAffluence = perRace.reduce((acc, s) => Math.max(acc, s.maxLocal), 0)
+
+  // Speed range across profiles
+  const speedLo = sim.runnerProfiles.length
+    ? Math.min(...sim.runnerProfiles.map((p) => p.baseSpeedMin))
+    : null
+  const speedHi = sim.runnerProfiles.length
+    ? Math.max(...sim.runnerProfiles.map((p) => p.baseSpeedMax))
+    : null
+
+  // Départs (faithful snapshot when available)
+  let depSnap: { id: string; name: string; startTime: number; color?: string }[] = []
+  try {
+    if (sim.racesSnapshot) depSnap = JSON.parse(sim.racesSnapshot)
+  } catch {
+    depSnap = []
+  }
+  const departs =
+    depSnap.length > 0
+      ? depSnap
+      : parsedRaces.map((r) => ({ id: r.id, name: r.name, startTime: r.startTime, color: r.color }))
+
+  // ── Map data (plain shapes for the client SVG) ──
+  const mapRaces: OpMapRace[] = parsedRaces.map((r) => ({
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    points: downsample(r.gpxPoints).map((p) => ({ lat: p.lat, lng: p.lng, dist: p.dist })),
+    segments: r.segments.map((s) => ({
+      type: s.type,
+      label: s.label,
+      lat: s.lat,
+      lng: s.lng,
+      dist: r.gpxPoints[s.indexStart]?.dist ?? 0,
+    })),
+  }))
+  const mapZones: OpMapZone[] = clustered
+    .map((z) => {
+      const race = parsedRaces.find((r) => r.id === z.raceId)
+      const pt = race?.gpxPoints[z.segmentIndex]
+      if (!pt) return null
+      return { raceId: z.raceId, lat: pt.lat, lng: pt.lng, dist: z.dist, kind: z.kind }
+    })
+    .filter((z): z is OpMapZone => z != null)
 
   return (
     <div
       style={{
         background: '#f3f4f6',
         minHeight: '100vh',
-        fontFamily:
-          "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         WebkitFontSmoothing: 'antialiased',
+        color: '#111827',
       }}
     >
-      <style>{printStyles}</style>
+      <style>{`
+        @media print {
+          body { background: white; }
+          .no-print { display: none !important; }
+          .sheet { box-shadow: none !important; margin: 0 auto !important; }
+          .page-break { page-break-before: always; }
+          .avoid-break { break-inside: avoid; }
+        }
+        @page { margin: 14mm; }
+      `}</style>
 
-      {/* No-print controls bar */}
-      <div
-        className="no-print"
-        style={{
-          background: '#fff',
-          borderBottom: '1px solid #e5e7eb',
-          padding: '12px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-        }}
-      >
-        <a
-          href={`/events/${id}/results/${simId}`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 14px',
-            borderRadius: '6px',
-            border: '1px solid #d1d5db',
-            background: '#f9fafb',
-            color: '#374151',
-            textDecoration: 'none',
-            fontSize: '13px',
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
-          ← Résultats
-        </a>
-
-        <button
-          onClick={() => window.print()}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 16px',
-            borderRadius: '6px',
-            border: 'none',
-            background: '#7CB518',
-            color: '#fff',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Imprimer / Exporter PDF
-        </button>
-      </div>
+      <ReportToolbar eventId={id} simId={simId} terrainHref={`/events/${id}/terrain/${simId}`} />
 
       {/* A4 Report sheet */}
       <div
+        className="sheet"
         style={{
           maxWidth: '794px',
           margin: '32px auto',
@@ -159,15 +170,7 @@ export default async function ReportPage({ params }: PageProps) {
         }}
       >
         {/* ── Header ── */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            marginBottom: '0',
-          }}
-        >
-          {/* Brand logo */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
@@ -191,19 +194,10 @@ export default async function ReportPage({ params }: PageProps) {
                 />
               </svg>
             </div>
-            <span
-              style={{
-                fontSize: '24px',
-                fontWeight: 400,
-                color: '#111827',
-                letterSpacing: '-0.5px',
-              }}
-            >
+            <span style={{ fontSize: '24px', fontWeight: 400, color: '#111827', letterSpacing: '-0.5px' }}>
               Trail<strong>Sim</strong>
             </span>
           </div>
-
-          {/* Event meta */}
           <div style={{ textAlign: 'right' }}>
             <div
               style={{
@@ -217,163 +211,173 @@ export default async function ReportPage({ params }: PageProps) {
             >
               RAPPORT DE SIMULATION
             </div>
-            <div
-              style={{
-                fontSize: '16px',
-                fontWeight: 700,
-                color: '#111827',
-                marginBottom: '4px',
-              }}
-            >
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
               {sim.event.name}
             </div>
             <div style={{ fontSize: '12px', color: '#6b7280' }}>
               {fmtDate(sim.event.date)}
               {sim.event.location ? ` · ${sim.event.location}` : ''}
             </div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: 2 }}>{sim.name}</div>
           </div>
         </div>
 
-        {/* Lime separator */}
-        <div
-          style={{
-            height: '2.5px',
-            background: '#7CB518',
-            marginTop: '18px',
-            marginBottom: '28px',
-            borderRadius: '2px',
-          }}
-        />
+        <div style={{ height: '2.5px', background: '#7CB518', marginTop: '18px', marginBottom: '28px', borderRadius: '2px' }} />
 
-        {/* ── Section: RÉSUMÉ ── */}
+        {!result && (
+          <p style={{ color: '#9ca3af', fontSize: 13 }}>
+            Aucun résultat enregistré pour cette simulation.
+          </p>
+        )}
+
+        {/* ── RÉSUMÉ ── */}
         <SectionTitle>RÉSUMÉ</SectionTitle>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '12px',
-            marginBottom: '32px',
-          }}
-        >
-          <StatCard value={String(totalRunners)} label="Total coureurs" />
-          <StatCard value={String(totalCourses)} label="Courses" />
-          <StatCard value={String(riskZoneCount)} label="Zones à risque" />
-          <StatCard value={`${avgAbandon}%`} label="Taux d'abandon moy." />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '28px' }}>
+          <StatCard value={String(sim.totalRunners)} label="Coureurs" />
+          <StatCard value={String(races.length)} label="Courses" />
+          <StatCard value={firstFinish?.finishSec != null ? fmtClock(firstFinish.finishSec) : '—'} label="1ère arrivée (T+)" sub={firstFinish?.name} />
+          <StatCard value={`≈ ${dnfTotal}`} label="Abandons estimés" tone="warning" />
+          <StatCard value={String(maxAffluence)} label="Affluence max /150 m" />
+          <StatCard value={String(clustered.length)} label="Zones à risque" />
+          <StatCard value={String(collisionWindows.length)} label="Croisements" />
+          <StatCard value={speedLo != null ? `${speedLo}–${speedHi}` : '—'} label="Vitesses (km/h)" />
         </div>
 
-        {/* ── Section: ZONES À RISQUE ── */}
-        <SectionTitle>ZONES À RISQUE</SectionTitle>
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            marginBottom: '32px',
-            fontSize: '12px',
-          }}
-        >
+        {/* ── SYNTHÈSE PAR COURSE ── */}
+        <SectionTitle>SYNTHÈSE PAR COURSE</SectionTitle>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '28px', fontSize: '12px' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
-              {['Zone', 'Score', 'Prob. bouchon', 'Densité max', 'Course'].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: 'left',
-                    padding: '6px 10px',
-                    fontWeight: 600,
-                    color: '#6b7280',
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.6px',
-                  }}
-                >
+              {['Course', 'Départ', 'Coureurs', 'Durée vainqueur', 'Abandons', 'Affluence /150m', 'Zones'].map((h) => (
+                <th key={h} style={thStyle}>
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {riskZones.length === 0 ? (
+            {perRace.length === 0 ? (
               <tr>
-                <td
-                  colSpan={5}
-                  style={{ padding: '16px 10px', color: '#9ca3af', textAlign: 'center' }}
-                >
-                  Aucune donnée de risque disponible
+                <td colSpan={7} style={{ padding: '16px 10px', color: '#9ca3af', textAlign: 'center' }}>
+                  Aucune donnée
                 </td>
               </tr>
             ) : (
-              riskZones.map((zone, i) => {
-                const race = parsedRaces.find((r) => r.id === zone.raceId)
-                const kmPos =
-                  race?.gpxPoints?.[zone.segmentIndex]?.dist?.toFixed(1) ?? '—'
-                const color = scoreColor(zone.riskScore)
+              perRace.map((s, i) => {
+                const dep = departs.find((d) => d.id === s.id)
                 return (
-                  <tr
-                    key={i}
-                    style={{
-                      borderBottom: '1px solid #f3f4f6',
-                      background: i % 2 === 0 ? '#fff' : '#fafafa',
-                    }}
-                  >
-                    <td style={{ padding: '8px 10px', color: '#374151' }}>
-                      Seg. {zone.segmentIndex + 1}
-                      <span style={{ color: '#9ca3af', marginLeft: '4px' }}>
-                        ({kmPos} km)
+                  <tr key={s.id} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 ? '#fafafa' : '#fff' }}>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#374151' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
+                        {s.name}
                       </span>
                     </td>
+                    <td style={tdMono}>{dep && dep.startTime ? `T+${dep.startTime}'` : 'T0'}</td>
+                    <td style={tdMono}>{s.total}</td>
+                    <td style={tdMono}>{s.firstDuration != null ? fmtClock(s.firstDuration) : '—'}</td>
+                    <td style={{ ...tdMono, color: s.dnf > 0 ? '#D97706' : '#374151' }}>{s.dnf}</td>
+                    <td style={tdMono}>{s.maxLocal}</td>
+                    <td style={tdMono}>{s.zones}</td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+
+        {/* ── RECOMMANDATIONS ── */}
+        <SectionTitle>RECOMMANDATIONS — FLUIDITÉ &amp; SÉCURITÉ</SectionTitle>
+        <div style={{ marginBottom: '28px' }}>
+          {recommendations.length === 0 ? (
+            <p style={{ color: '#16A34A', fontSize: 13, fontWeight: 500 }}>
+              Aucun point de vigilance majeur détecté : le parcours est fluide avec cette configuration.
+            </p>
+          ) : (
+            recommendations.map((r, i) => (
+              <div
+                key={i}
+                className="avoid-break"
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #f1f0ec',
+                  borderLeft: `3px solid ${prioColor(r.priority)}`,
+                  marginBottom: 8,
+                  background: '#fdfdfc',
+                }}
+              >
+                <div style={{ minWidth: 92 }}>
+                  <PriorityBadge p={r.priority} />
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {r.category}
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 2 }}>{r.where}</div>
+                  <div style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.5 }}>{r.action}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* ── BOUCHONS & AFFLUENCE ── */}
+        <div className="page-break" />
+        <SectionTitle>BOUCHONS &amp; AFFLUENCE</SectionTitle>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '28px', fontSize: '12px' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
+              {['Course', 'Km', 'Type', 'Densité pic', 'Bloqué', 'Score'].map((h) => (
+                <th key={h} style={thStyle}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {bouchons.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ padding: '16px 10px', color: '#9ca3af', textAlign: 'center' }}>
+                  Aucune zone à risque détectée
+                </td>
+              </tr>
+            ) : (
+              bouchons.map((z, i) => {
+                const race = parsedRaces.find((r) => r.id === z.raceId)
+                const color = scoreColor(z.riskScore)
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 ? '#fafafa' : '#fff' }}>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: race?.color ?? '#999', display: 'inline-block', flexShrink: 0 }} />
+                        {race?.name ?? z.raceId}
+                      </span>
+                    </td>
+                    <td style={tdMono}>{z.dist.toFixed(1)}</td>
                     <td style={{ padding: '8px 10px' }}>
                       <span
                         style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
+                          fontSize: 10,
                           fontWeight: 700,
-                          color,
+                          padding: '2px 7px',
+                          borderRadius: 4,
+                          background: z.kind === 'bouchon' ? '#fee2e2' : '#fef3c7',
+                          color: z.kind === 'bouchon' ? '#DC2626' : '#D97706',
                         }}
                       >
-                        <span
-                          style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            background: color,
-                            display: 'inline-block',
-                          }}
-                        />
-                        {zone.riskScore.toFixed(0)}
+                        {z.kind === 'bouchon' ? 'Bouchon' : 'Affluence'}
                       </span>
                     </td>
-                    <td style={{ padding: '8px 10px', color: '#374151' }}>
-                      {(zone.jamProbability * 100).toFixed(0)}%
-                    </td>
-                    <td style={{ padding: '8px 10px', color: '#374151' }}>
-                      {zone.peakDensity.toFixed(2)}
-                    </td>
+                    <td style={tdMono}>{Math.round(z.peakDensity)} /150m</td>
+                    <td style={tdMono}>{z.kind === 'bouchon' ? `${Math.round(z.jamProbability * 100)}%` : '—'}</td>
                     <td style={{ padding: '8px 10px' }}>
-                      {race ? (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            fontSize: '11px',
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              background: race.color,
-                              display: 'inline-block',
-                              flexShrink: 0,
-                            }}
-                          />
-                          {race.name}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#9ca3af' }}>—</span>
-                      )}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, color }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                        {Math.round(z.riskScore * 100)}
+                      </span>
                     </td>
                   </tr>
                 )
@@ -382,21 +386,25 @@ export default async function ReportPage({ params }: PageProps) {
           </tbody>
         </table>
 
-        {/* ── Section: FENÊTRES DE COLLISION ── */}
-        <SectionTitle>FENÊTRES DE COLLISION</SectionTitle>
-        <div style={{ marginBottom: '32px' }}>
-          {!result || result.collisionWindows.length === 0 ? (
+        {/* ── CROISEMENTS INTER-COURSES ── */}
+        <SectionTitle>CROISEMENTS INTER-COURSES</SectionTitle>
+        <div style={{ marginBottom: '28px' }}>
+          {collisionWindows.length === 0 ? (
             <p style={{ color: '#9ca3af', fontSize: '13px' }}>
-              Aucune fenêtre de collision détectée.
+              {races.length < 2
+                ? 'Une seule course : pas de croisement inter-courses possible.'
+                : 'Aucun croisement de pelotons détecté.'}
             </p>
           ) : (
-            result.collisionWindows.map((cw, i) => {
+            collisionWindows.map((cw, i) => {
               const cwRaces = cw.raceIds
                 .map((rid) => parsedRaces.find((r) => r.id === rid))
                 .filter(Boolean) as typeof parsedRaces
+              const dist = cwRaces[0]?.gpxPoints?.[cw.segmentIndex]?.dist
               return (
                 <div
                   key={i}
+                  className="avoid-break"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -409,7 +417,6 @@ export default async function ReportPage({ params }: PageProps) {
                     fontSize: '13px',
                   }}
                 >
-                  {/* Race tags */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', flex: 1 }}>
                     {cwRaces.map((r) => (
                       <span
@@ -427,115 +434,78 @@ export default async function ReportPage({ params }: PageProps) {
                           color: '#374151',
                         }}
                       >
-                        <span
-                          style={{
-                            width: '7px',
-                            height: '7px',
-                            borderRadius: '50%',
-                            background: r.color,
-                            display: 'inline-block',
-                          }}
-                        />
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: r.color, display: 'inline-block' }} />
                         {r.name}
                       </span>
                     ))}
                   </div>
-                  {/* Time window */}
+                  {dist != null && (
+                    <span style={{ color: '#6b7280', fontSize: 12, fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>
+                      km {dist.toFixed(1)}
+                    </span>
+                  )}
                   <span style={{ color: '#374151', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {fmtTime(cw.tStart)} – {fmtTime(cw.tEnd)}
+                    {fmtClock(cw.tStart)} – {fmtClock(cw.tEnd)}
                   </span>
-                  {/* Peak */}
-                  <span
-                    style={{
-                      color: '#D97706',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    pic {cw.peak.toFixed(2)}
+                  <span style={{ color: '#D97706', fontWeight: 700, fontSize: '12px', whiteSpace: 'nowrap' }}>
+                    jusqu&apos;à {Math.round(cw.peak)}
                   </span>
                 </div>
               )
             })
           )}
-        </div>
-
-        {/* ── Section: PROFILS COUREURS ── */}
-        <SectionTitle>PROFILS COUREURS</SectionTitle>
-        <div style={{ marginBottom: '32px' }}>
-          {sim.runnerProfiles.length === 0 ? (
-            <p style={{ color: '#9ca3af', fontSize: '13px' }}>Aucun profil configuré.</p>
-          ) : (
-            sim.runnerProfiles.map((profile) => (
-              <div
-                key={profile.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  marginBottom: '10px',
-                }}
-              >
-                <span
-                  style={{
-                    minWidth: '120px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#374151',
-                  }}
-                >
-                  {profile.label}
-                </span>
-                <div
-                  style={{
-                    flex: 1,
-                    background: '#f3f4f6',
-                    borderRadius: '4px',
-                    height: '14px',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.min(100, profile.percentage)}%`,
-                      height: '100%',
-                      background: profile.color,
-                      borderRadius: '4px',
-                      transition: 'width 0.3s ease',
-                    }}
-                  />
-                </div>
-                <span
-                  style={{
-                    minWidth: '38px',
-                    textAlign: 'right',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: '#374151',
-                  }}
-                >
-                  {profile.percentage.toFixed(0)}%
-                </span>
-              </div>
-            ))
+          {collisionWindows.length > 0 && (
+            <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, lineHeight: 1.5 }}>
+              Plages <strong>probabilistes</strong> (sur l&apos;ensemble des simulations) : elles s&apos;ouvrent dès que la
+              rencontre devient possible.
+            </p>
           )}
         </div>
 
-        {/* ── Section: CONDITIONS ── */}
-        <SectionTitle>CONDITIONS</SectionTitle>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '12px',
-            marginBottom: '40px',
-          }}
-        >
+        {/* ── CARTE D'IMPLANTATION ── */}
+        <div className="page-break" />
+        <SectionTitle>CARTE D&apos;IMPLANTATION</SectionTitle>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.5 }}>
+          Tracés, ravitaillements, passages étroits, zones à risque et postes logistiques — le plan
+          à déployer le jour J.
+        </p>
+        <div className="avoid-break">
+          <OperationalMap simId={simId} races={mapRaces} zones={mapZones} height={460} showInventory />
+        </div>
+
+        {/* ── CONDITIONS & CONFIG ── */}
+        <div className="page-break" />
+        <SectionTitle>CONFIGURATION UTILISÉE</SectionTitle>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+          {departs.map((d) => (
+            <span
+              key={d.id}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid #e5e7eb',
+                fontSize: 12,
+                color: '#374151',
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.color ?? '#999', display: 'inline-block' }} />
+              {d.name}
+              <span style={{ color: '#9ca3af' }}>· {d.startTime ? `T+${d.startTime} min` : 'T0'}</span>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
           <CondCard label="Température" value={`${sim.temperature}°C`} />
           <CondCard label="Vent" value={`${sim.wind} km/h`} />
           <CondCard label="Pluie" value={sim.rain ? `Oui · ${sim.rainIntensity} mm/h` : 'Non'} />
           <CondCard label="Brouillard" value={sim.fog ? 'Oui' : 'Non'} />
+          <CondCard label="Simulations (runs)" value={String(sim.nRuns)} />
+          <CondCard label="Seuil bouchon" value={`${sim.jamThreshold} crs`} />
+          <CondCard label="Seuil affluence" value={`${sim.affluenceThreshold} /150m`} />
+          <CondCard label="Vitesses" value={speedLo != null ? `${speedLo}–${speedHi} km/h` : '—'} />
         </div>
 
         {/* ── Footer ── */}
@@ -550,12 +520,38 @@ export default async function ReportPage({ params }: PageProps) {
             color: '#9ca3af',
           }}
         >
-          <span>Page 1</span>
+          <span>{fmtDate(sim.event.date)} · {sim.event.name}</span>
           <span>Généré par TrailSim · trailsim.fr</span>
         </div>
       </div>
     </div>
   )
+}
+
+/* ── Styles ── */
+const thStyle: React.CSSProperties = {
+  textAlign: 'left',
+  padding: '6px 10px',
+  fontWeight: 600,
+  color: '#6b7280',
+  fontSize: '11px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.6px',
+}
+const tdMono: React.CSSProperties = {
+  padding: '8px 10px',
+  color: '#374151',
+  fontFamily: "'JetBrains Mono', 'Fira Mono', monospace",
+}
+
+function prioColor(p: 'haute' | 'moyenne' | 'faible'): string {
+  return p === 'haute' ? '#DC2626' : p === 'moyenne' ? '#D97706' : '#6b7280'
+}
+
+function scoreColor(score: number): string {
+  if (score >= 0.8) return '#DC2626'
+  if (score >= 0.5) return '#D97706'
+  return '#16A34A'
 }
 
 /* ── Sub-components ── */
@@ -579,22 +575,15 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
-function StatCard({ value, label }: { value: string; label: string }) {
+function StatCard({ value, label, sub, tone }: { value: string; label: string; sub?: string; tone?: 'warning' }) {
   return (
-    <div
-      style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: '10px',
-        padding: '14px 12px',
-        textAlign: 'center',
-      }}
-    >
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '14px 12px', textAlign: 'center' }}>
       <div
         style={{
           fontFamily: "'JetBrains Mono', 'Fira Mono', 'Courier New', monospace",
-          fontSize: '26px',
+          fontSize: '22px',
           fontWeight: 700,
-          color: '#111827',
+          color: tone === 'warning' ? '#D97706' : '#111827',
           lineHeight: 1.1,
           marginBottom: '6px',
         }}
@@ -602,24 +591,37 @@ function StatCard({ value, label }: { value: string; label: string }) {
         {value}
       </div>
       <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500 }}>{label}</div>
+      {sub && <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: 2 }}>{sub}</div>}
     </div>
   )
 }
 
 function CondCard({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: '10px',
-        padding: '12px',
-        textAlign: 'center',
-      }}
-    >
-      <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>
-        {label}
-      </div>
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+      <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>{label}</div>
       <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>{value}</div>
     </div>
+  )
+}
+
+function PriorityBadge({ p }: { p: 'haute' | 'moyenne' | 'faible' }) {
+  const c = prioColor(p)
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        fontSize: 10,
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+        padding: '2px 8px',
+        borderRadius: 999,
+        color: c,
+        background: `${c}1a`,
+      }}
+    >
+      {p}
+    </span>
   )
 }
