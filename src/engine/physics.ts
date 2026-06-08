@@ -4,12 +4,18 @@
  * Monotonic away from the peak, so steeper climbs and descents are always
  * slower (the previous quadratic wrongly sped up very steep climbs).
  *
+ * The falloff exponent is 2.5 (not Tobler's original 3.5, which is tuned for
+ * hikers): trail runners lose less on moderate climbs and recover more on
+ * runnable descents than walkers do. With 2.5 a +10% climb costs ~22% (was
+ * 30%) and a runnable −10% descent gives back speed instead of being neutral,
+ * so rolling courses no longer get systematically over-slowed.
+ *
  * slopePct: slope in percent (positive = uphill)
  */
 export function getMinettiSlopeFactor(slopePct: number): number {
   const i = slopePct / 100
-  const factor = Math.exp(-3.5 * (Math.abs(i + 0.05) - 0.05))
-  return Math.max(0.12, Math.min(1.25, factor))
+  const factor = Math.exp(-2.5 * (Math.abs(i + 0.05) - 0.05))
+  return Math.max(0.12, Math.min(1.35, factor))
 }
 
 /**
