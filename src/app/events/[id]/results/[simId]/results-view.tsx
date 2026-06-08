@@ -543,30 +543,41 @@ export function ResultsView({
     return races.map((race) => {
       const rRunners = runnersData.filter((r) => r.raceId === race.id)
       let firstSec = Infinity
+      let departSec = Infinity
       let dnf = 0
       for (const r of rRunners) {
         let maxPos = 0
-        let finished = false
+        let moved = false
         for (let t = 0; t < r.positions.length; t++) {
           const p = r.positions[t]
           if (p > maxPos) maxPos = p
-          if (!finished && p >= 1) {
-            finished = true
+          // First instant this runner is moving = its wave's actual départure
+          // in the SNAPSHOT (immune to later edits of race.startTime).
+          if (!moved && p > 0) {
+            moved = true
+            const s = rawTimestamps[t]
+            if (s != null && s < departSec) departSec = s
+          }
+          if (p >= 1) {
             const s = rawTimestamps[t]
             if (s != null && s < firstSec) firstSec = s
+            break
           }
         }
         if (maxPos < 0.999) dnf++
       }
       const zones = riskMap.filter((e) => e.raceId === race.id).length
-      const startSec = race.startTime * 60
       return {
         id: race.id,
         name: race.name,
         color: race.color,
         total: rRunners.length,
-        // Race duration of the winner (excludes the staggered start wait)
-        firstDuration: isFinite(firstSec) ? firstSec - startSec : null,
+        // Winner's running time = finish − the wave's departure, both read from
+        // the stored trajectory, so a staggered start is excluded correctly even
+        // if race.startTime was changed after the run.
+        firstDuration: isFinite(firstSec)
+          ? firstSec - (isFinite(departSec) ? departSec : 0)
+          : null,
         dnf,
         maxLocal: maxLocalByRace.get(race.id) ?? 0,
         zones,
