@@ -18,7 +18,7 @@ interface RaceLike {
   name: string
   color: string
   gpxPoints: string
-  segments: { id: string; type: string; lat: number; lng: number; indexStart: number; lengthM: number }[]
+  segments?: { id: string; type: string; lat: number; lng: number; indexStart: number; lengthM: number }[]
 }
 
 interface Step4ConstraintsProps {
@@ -69,7 +69,7 @@ export function Step4Constraints({
 
   const [constraints, setConstraints] = useState<ConstraintMarker[]>(() =>
     races.flatMap((r) =>
-      r.segments.map((s) => ({
+      (r.segments ?? []).map((s) => ({
         id: s.id,
         raceId: r.id,
         lat: s.lat,
