@@ -9,6 +9,8 @@ import {
   Step2Peloton,
   buildInitialConfigs,
   archetypesToPeloton,
+  refreshArchetypeTuning,
+  PELOTON_CALIB_VERSION,
   type PelotonConfigs,
 } from './step2-peloton'
 import { Step3Conditions, type WeatherData } from './step3-conditions'
@@ -79,18 +81,30 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   // present, else from the last simulation's runner profiles, else defaults.
   const pelotonStorageKey = `ts_peloton:${event.id}`
   const [pelotonConfigs, setPelotonConfigs] = useState<PelotonConfigs>(() => {
-    // 1. Local draft (edits not yet launched)
+    // 1. Local draft (edits not yet launched). Drafts are wrapped with the
+    // calibration version: an older/legacy draft is refreshed once to the
+    // current archetype tuning (keeping the organiser's distribution).
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem(pelotonStorageKey)
-        if (raw) return JSON.parse(raw) as PelotonConfigs
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (parsed && parsed.__v === PELOTON_CALIB_VERSION && parsed.configs) {
+            return parsed.configs as PelotonConfigs
+          }
+          const legacy = (parsed?.configs ?? parsed) as PelotonConfigs
+          return refreshArchetypeTuning(legacy)
+        }
       } catch {
         /* ignore */
       }
     }
-    // 2. Per-race config saved with the last simulation
+    // 2. Per-race config saved with the last simulation → refresh tuning so the
+    // current calibration applies automatically (distribution preserved).
     try {
-      if (simulation?.peloton) return JSON.parse(simulation.peloton) as PelotonConfigs
+      if (simulation?.peloton) {
+        return refreshArchetypeTuning(JSON.parse(simulation.peloton) as PelotonConfigs)
+      }
     } catch {
       /* ignore */
     }
@@ -100,7 +114,10 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
 
   useEffect(() => {
     try {
-      localStorage.setItem(pelotonStorageKey, JSON.stringify(pelotonConfigs))
+      localStorage.setItem(
+        pelotonStorageKey,
+        JSON.stringify({ __v: PELOTON_CALIB_VERSION, configs: pelotonConfigs })
+      )
     } catch {
       /* quota */
     }

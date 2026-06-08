@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useSimulation } from '@/hooks/use-simulation'
+import { refreshArchetypeTuning, type PelotonConfigs } from '@/lib/archetypes'
 import type { RunnerProfile, SimConfig, GPXPoint } from '@/engine/types'
 
 interface SimulateRunnerProps {
@@ -132,7 +133,15 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
     type RaceCfg = { totalRunners: number; archetypes: ArchLite[] }
     let pelotonByRace: Record<string, RaceCfg> = {}
     try {
-      if (simulation.peloton) pelotonByRace = JSON.parse(simulation.peloton) as Record<string, RaceCfg>
+      if (simulation.peloton) {
+        // Refresh archetype tuning to the current calibration (keeps the
+        // organiser's distribution) so re-running an older simulation still
+        // uses the latest speed bands.
+        const refreshed = refreshArchetypeTuning(
+          JSON.parse(simulation.peloton) as PelotonConfigs
+        )
+        pelotonByRace = refreshed as unknown as Record<string, RaceCfg>
+      }
     } catch {
       pelotonByRace = {}
     }

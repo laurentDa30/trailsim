@@ -6,83 +6,28 @@ import { cn } from '@/lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import type { Race } from '@prisma/client'
 import type { RunnerProfile } from '@/lib/validators/simulation'
+import {
+  DEFAULT_ARCHETYPES,
+  PELOTON_CALIB_VERSION,
+  refreshArchetypeTuning,
+  type Archetype,
+  type RaceConfig,
+  type PelotonConfigs,
+} from '@/lib/archetypes'
+
+export {
+  DEFAULT_ARCHETYPES,
+  PELOTON_CALIB_VERSION,
+  refreshArchetypeTuning,
+  type Archetype,
+  type RaceConfig,
+  type PelotonConfigs,
+}
 
 export interface PelotonData {
   totalRunners: number
   profiles: RunnerProfile[]
 }
-
-export const DEFAULT_ARCHETYPES = [
-  {
-    id: 'elite',
-    label: 'Élite',
-    color: '#7CB518',
-    percentage: 5,
-    speedMin: 13,
-    speedMax: 18,
-    fatiguePlancher: 80,
-    techLevel: 95,
-    ravito: 30,
-    abandon: 2,
-  },
-  {
-    id: 'confirme',
-    label: 'Confirmé',
-    color: '#38BDF8',
-    percentage: 20,
-    speedMin: 10,
-    speedMax: 13,
-    fatiguePlancher: 70,
-    techLevel: 75,
-    ravito: 60,
-    abandon: 5,
-  },
-  {
-    id: 'intermediaire',
-    label: 'Intermédiaire',
-    color: '#FBBF24',
-    percentage: 35,
-    speedMin: 8,
-    speedMax: 11,
-    fatiguePlancher: 60,
-    techLevel: 55,
-    ravito: 90,
-    abandon: 8,
-  },
-  {
-    id: 'debutant',
-    label: 'Débutant',
-    color: '#F472B6',
-    percentage: 30,
-    speedMin: 6,
-    speedMax: 8,
-    fatiguePlancher: 50,
-    techLevel: 40,
-    ravito: 120,
-    abandon: 12,
-  },
-  {
-    id: 'marcheur',
-    label: 'Marcheur',
-    color: '#A78BFA',
-    percentage: 10,
-    speedMin: 4,
-    speedMax: 6,
-    fatiguePlancher: 40,
-    techLevel: 25,
-    ravito: 180,
-    abandon: 15,
-  },
-]
-
-export type Archetype = typeof DEFAULT_ARCHETYPES[number]
-
-export interface RaceConfig {
-  totalRunners: number
-  archetypes: Archetype[]
-}
-
-export type PelotonConfigs = Record<string, RaceConfig>
 
 interface SavedProfile {
   label: string
@@ -111,18 +56,10 @@ export function buildInitialConfigs(
     const byLabel = new Map(savedProfiles.map((p) => [p.label, p]))
     base.forEach((a) => {
       const p = byLabel.get(a.label)
-      if (p) {
-        a.percentage = p.percentage
-        a.speedMin = p.baseSpeedMin
-        a.speedMax = p.baseSpeedMax
-        a.fatiguePlancher = Math.round(p.fatigueFactor * 100)
-        a.techLevel = Math.round(p.techSkill * 100)
-        a.ravito = p.ravitoDuration
-        a.abandon = Math.round(p.abandonRate * 100)
-      } else {
-        // Was at 0% in the saved simulation → keep the archetype but at 0%
-        a.percentage = 0
-      }
+      // Restore only the organiser's distribution; speeds and physical params
+      // always come from the current (recalibrated) DEFAULT_ARCHETYPES so a
+      // central recalibration applies automatically. Absent label → 0%.
+      a.percentage = p ? p.percentage : 0
     })
     // Any saved profile that isn't a default archetype (custom) is appended
     savedProfiles.forEach((p, i) => {
