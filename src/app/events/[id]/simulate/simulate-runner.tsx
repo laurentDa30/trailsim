@@ -47,6 +47,7 @@ interface LogSource {
   nProfiles: number
   nRaces: number
   nConstraints: number
+  nRuns: number
 }
 
 /** Build the simulation log from the real configuration (no hardcoded values). */
@@ -55,6 +56,10 @@ function buildLogLines(s: LogSource): string[] {
     `T+${s.temperature}°C · vent ${s.wind} km/h` +
     (s.rain ? ' · pluie' : '') +
     (s.fog ? ' · brouillard' : '')
+  const n = s.nRuns > 0 ? s.nRuns : 100
+  const q1 = Math.max(1, Math.round(n / 4))
+  const q2 = Math.max(1, Math.round(n / 2))
+  const q3 = Math.max(1, Math.round((3 * n) / 4))
   return [
     'Initialisation du moteur Monte-Carlo…',
     `Chargement de ${s.nProfiles} profil(s) coureur…`,
@@ -67,17 +72,17 @@ function buildLogLines(s: LogSource): string[] {
       : 'Aucune portion sensible marquée',
     `Seuil de bouchon : ${s.jamThreshold} coureurs`,
     'Départs en vagues différées…',
-    'Run 1/100…',
+    `Run 1/${n}…`,
     'Accumulation des densités par tranche de 150 m…',
-    'Run 25/100…',
+    `Run ${q1}/${n}…`,
     'Détection des bouchons (sections saturées)…',
-    'Run 50/100…',
+    `Run ${q2}/${n}…`,
     s.nRaces > 1
       ? 'Analyse des rencontres inter-courses…'
       : 'Course unique — pas de rencontre inter-courses',
-    'Run 75/100…',
+    `Run ${q3}/${n}…`,
     'Affinement des probabilités…',
-    'Run 100/100…',
+    `Run ${n}/${n}…`,
     'Finalisation de la carte de risque…',
     'Calcul terminé ✓',
   ]
@@ -242,6 +247,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
         (sum, r) => sum + r.segments.filter((s) => s.type !== 'RAVITO').length,
         0
       ),
+      nRuns: simulation.nRuns && simulation.nRuns > 0 ? simulation.nRuns : 100,
     })
 
     return { config, logLines }
