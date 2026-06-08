@@ -501,20 +501,39 @@ export function ResultsView({
     return dnf
   }, [runnersData])
 
-  // Peak runners on course across the whole timeline
-  const peakOnCourse = useMemo(() => {
-    if (timestamps.length === 0) return 0
-    let peak = 0
+  // Peak LOCAL crowding per race: the most runners concentrated within any
+  // ~150 m stretch at any moment (the real figure for sizing a post / safety),
+  // not the whole-course headcount which is ~always the number of entrants.
+  const maxLocalByRace = useMemo(() => {
+    const BIN_KM = 0.15
+    const totals = new Map<string, number>()
+    for (const race of races) {
+      if (race.gpxPoints.length > 0) totals.set(race.id, race.gpxPoints[race.gpxPoints.length - 1].dist)
+    }
+    const max = new Map<string, number>()
     for (let t = 0; t < timestamps.length; t++) {
-      let n = 0
+      const binCounts = new Map<string, number>()
       for (const r of runnersData) {
         const p = r.positions[t] ?? 0
-        if (p > 0 && p < 1) n++
+        if (p <= 0 || p >= 1) continue
+        const total = totals.get(r.raceId) ?? 0
+        const bin = total > 0 ? Math.floor((p * total) / BIN_KM) : 0
+        const key = `${r.raceId}#${bin}`
+        binCounts.set(key, (binCounts.get(key) ?? 0) + 1)
       }
-      if (n > peak) peak = n
+      for (const [key, c] of binCounts) {
+        const raceId = key.slice(0, key.lastIndexOf('#'))
+        if (c > (max.get(raceId) ?? 0)) max.set(raceId, c)
+      }
     }
-    return peak
-  }, [runnersData, timestamps])
+    return max
+  }, [runnersData, races, timestamps])
+
+  const maxLocalAll = useMemo(() => {
+    let m = 0
+    for (const v of maxLocalByRace.values()) m = Math.max(m, v)
+    return m
+  }, [maxLocalByRace])
 
   // Per-course breakdown of the key stats
   const perRaceStats = useMemo(() => {
@@ -536,15 +555,6 @@ export function ResultsView({
         }
         if (maxPos < 0.999) dnf++
       }
-      let peak = 0
-      for (let t = 0; t < rawTimestamps.length; t++) {
-        let n = 0
-        for (const r of rRunners) {
-          const p = r.positions[t] ?? 0
-          if (p > 0 && p < 1) n++
-        }
-        if (n > peak) peak = n
-      }
       const zones = riskMap.filter((e) => e.raceId === race.id).length
       const startSec = race.startTime * 60
       return {
@@ -555,11 +565,11 @@ export function ResultsView({
         // Race duration of the winner (excludes the staggered start wait)
         firstDuration: isFinite(firstSec) ? firstSec - startSec : null,
         dnf,
-        peak,
+        maxLocal: maxLocalByRace.get(race.id) ?? 0,
         zones,
       }
     })
-  }, [races, runnersData, rawTimestamps, riskMap])
+  }, [races, runnersData, rawTimestamps, riskMap, maxLocalByRace])
 
   // Per-course profile mix, from the actually simulated runners
   const profilesByRace = useMemo(() => {
@@ -745,9 +755,9 @@ export function ResultsView({
               />
               <StatTile
                 icon={<UsersIcon size={12} />}
-                label="Pic en piste"
-                value={String(peakOnCourse)}
-                sub="max coureurs simultanés"
+                label="Affluence max"
+                value={String(maxLocalAll)}
+                sub="coureurs / 150 m"
               />
               <StatTile
                 icon={<AlertTriangleIcon size={12} />}
@@ -797,9 +807,11 @@ export function ResultsView({
                         </div>
                         <div>
                           <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-ink)' }}>
-                            {s.peak}
+                            {s.maxLocal}
                           </div>
-                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>pic</div>
+                          <div className="text-[9px]" style={{ color: 'var(--color-ink-4)' }} title="Pic de coureurs sur 150 m">
+                            affluence/150m
+                          </div>
                         </div>
                         <div>
                           <div className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--color-ink)' }}>
