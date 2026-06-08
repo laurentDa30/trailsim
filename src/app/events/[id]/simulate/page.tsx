@@ -47,6 +47,7 @@ export default async function SimulatePage({ params }: PageProps) {
       indexStart: s.indexStart,
       width: s.width,
       techLevel: s.techLevel,
+      lengthM: s.lengthM,
     })),
   }))
 

@@ -84,6 +84,7 @@ model Segment {
   race       Race    @relation(fields: [raceId], references: [id], onDelete: Cascade)
   indexStart Int     @default(0)
   indexEnd   Int     @default(0)
+  lengthM    Int     @default(200)
   type       String  @default("NARROW")
   label      String?
   width      Float   @default(1.0)

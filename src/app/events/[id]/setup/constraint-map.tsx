@@ -35,6 +35,20 @@ export interface ConstraintMarker {
   lat: number
   lng: number
   type: string
+  indexStart: number
+  lengthM: number
+}
+
+/** GPX points covered by a zone of `lengthM` centred on `indexStart`. */
+function zoneSpan(points: GPXPoint[], indexStart: number, lengthM: number): [number, number][] {
+  if (points.length < 2 || !points[indexStart]) return []
+  const centre = points[indexStart].dist
+  const half = lengthM / 2000 // km
+  const out: [number, number][] = []
+  for (const p of points) {
+    if (Math.abs(p.dist - centre) <= half) out.push([p.lat, p.lng])
+  }
+  return out
 }
 
 interface ConstraintMapProps {
@@ -165,6 +179,22 @@ export default function ConstraintMap({
           onPlace={onPlace}
           onPlaceLogi={onPlaceLogi}
         />
+
+        {/* Zone extent (covered stretch) for non-ravito constraints */}
+        {constraints.map((c) => {
+          if (c.type === 'RAVITO') return null
+          const race = races.find((r) => r.id === c.raceId)
+          if (!race) return null
+          const span = zoneSpan(race.gpxPoints, c.indexStart, c.lengthM)
+          if (span.length < 2) return null
+          return (
+            <Polyline
+              key={`span-${c.id}`}
+              positions={span}
+              pathOptions={{ color: presetOf(c.type).color, weight: 9, opacity: 0.45 }}
+            />
+          )
+        })}
 
         {constraints.map((c) => {
           const preset = presetOf(c.type)

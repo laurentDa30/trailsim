@@ -9,6 +9,7 @@ const SegmentCreateSchema = z.object({
   lng: z.number(),
   width: z.number().min(0).max(1).default(0.5),
   techLevel: z.number().int().min(0).max(5).default(1),
+  lengthM: z.number().int().min(20).max(2000).default(200),
   label: z.string().optional(),
 })
 
@@ -66,6 +67,7 @@ export async function POST(
         lng: parsed.data.lng,
         width: parsed.data.width,
         techLevel: parsed.data.techLevel,
+        lengthM: parsed.data.lengthM,
         label: parsed.data.label,
       },
     })

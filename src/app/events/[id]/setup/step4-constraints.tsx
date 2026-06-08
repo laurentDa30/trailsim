@@ -18,7 +18,7 @@ interface RaceLike {
   name: string
   color: string
   gpxPoints: string
-  segments: { id: string; type: string; lat: number; lng: number; indexStart: number }[]
+  segments: { id: string; type: string; lat: number; lng: number; indexStart: number; lengthM: number }[]
 }
 
 interface Step4ConstraintsProps {
@@ -35,6 +35,7 @@ interface Step4ConstraintsProps {
 
 const PERSONNEL_TYPES = ['signaleur', 'benevole', 'medical', 'chrono']
 const RUN_OPTIONS = [50, 100, 200, 300]
+const ZONE_LENGTHS = [50, 100, 200, 400, 800]
 
 export function Step4Constraints({
   eventId,
@@ -64,11 +65,20 @@ export function Step4Constraints({
 
   const [constraints, setConstraints] = useState<ConstraintMarker[]>(() =>
     races.flatMap((r) =>
-      r.segments.map((s) => ({ id: s.id, raceId: r.id, lat: s.lat, lng: s.lng, type: s.type }))
+      r.segments.map((s) => ({
+        id: s.id,
+        raceId: r.id,
+        lat: s.lat,
+        lng: s.lng,
+        type: s.type,
+        indexStart: s.indexStart,
+        lengthM: s.lengthM,
+      }))
     )
   )
   const [placingPreset, setPlacingPreset] = useState<string | null>(null)
   const [placingLogiType, setPlacingLogiType] = useState<string | null>(null)
+  const [zoneLength, setZoneLength] = useState(200)
 
   function newId() {
     return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -98,11 +108,15 @@ export function Step4Constraints({
           lng,
           width: preset.widthRatio,
           techLevel: preset.techLevel,
+          lengthM: zoneLength,
         }),
       })
       if (res.ok) {
         const seg = (await res.json()) as { id: string }
-        setConstraints((prev) => [...prev, { id: seg.id, raceId, lat, lng, type: preset.type }])
+        setConstraints((prev) => [
+          ...prev,
+          { id: seg.id, raceId, lat, lng, type: preset.type, indexStart, lengthM: zoneLength },
+        ])
       }
     } catch {
       /* ignore transient errors */
@@ -174,6 +188,34 @@ export function Step4Constraints({
               </button>
             )
           })}
+        </div>
+        {/* Zone length */}
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
+            Longueur de la zone
+          </span>
+          <div className="flex items-center gap-1">
+            {ZONE_LENGTHS.map((m) => {
+              const active = zoneLength === m
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setZoneLength(m)}
+                  className="px-2 py-0.5 rounded text-[11px] font-mono tabular-nums transition-colors"
+                  style={{
+                    background: active ? 'var(--color-lime)' : 'var(--color-bg-2)',
+                    color: active ? '#ffffff' : 'var(--color-ink-3)',
+                    border: '1px solid',
+                    borderColor: active ? 'var(--color-lime)' : 'var(--color-line)',
+                    fontWeight: active ? 700 : 400,
+                  }}
+                >
+                  {m < 1000 ? `${m}m` : `${m / 1000}km`}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 

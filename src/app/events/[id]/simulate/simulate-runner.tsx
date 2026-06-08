@@ -30,7 +30,7 @@ interface SimulateRunnerProps {
     color: string
     gpxPoints: string
     startTime: number
-    segments: { type: string; indexStart: number; width: number; techLevel: number }[]
+    segments: { type: string; indexStart: number; width: number; techLevel: number; lengthM: number }[]
   }[]
 }
 
@@ -184,7 +184,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
               dist: gpxPoints[s.indexStart]?.dist ?? 0,
               widthRatio: s.width,
               techLevel: s.techLevel,
-              influenceKm: 0.2,
+              influenceKm: (s.lengthM ?? 200) / 1000,
             })),
           // Placed ravito points → positions as fractions of the race
           ravitos: (() => {
