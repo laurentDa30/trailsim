@@ -57,6 +57,8 @@ interface ConstraintMapProps {
   placingPreset: string | null
   onPlace: (raceId: string, indexStart: number, lat: number, lng: number) => void
   onRemove: (id: string) => void
+  /** Races currently shown; placement and rendering ignore hidden ones. */
+  visibleRaces?: Set<string>
   // Logistics (free placement, not snapped to the trace)
   logistics?: PlacedLogi[]
   placingLogiType?: string | null
@@ -115,20 +117,25 @@ function ClickHandler({
         return
       }
       if (!placingPreset) return
-      // Constraints: snap to the nearest GPX point across all races (within ~120 m)
-      let best: { raceId: string; index: number; lat: number; lng: number } | null = null
-      let bestDist = 0.12 // km
+      // Constraints are a property of the terrain: a single-track is narrow for
+      // every course that runs it. So place on EACH (visible) race passing
+      // within ~120 m of the click, snapping to that race's own nearest point —
+      // one click covers a shared section instead of three. `races` here is
+      // already the visible subset, so hiding traces narrows the target.
+      const RADIUS_KM = 0.12
       for (const r of races) {
+        let bestI = -1
+        let bestDist = RADIUS_KM
         for (let i = 0; i < r.gpxPoints.length; i++) {
           const p = r.gpxPoints[i]
           const d = haversineKm(e.latlng.lat, e.latlng.lng, p.lat, p.lng)
           if (d < bestDist) {
             bestDist = d
-            best = { raceId: r.id, index: i, lat: p.lat, lng: p.lng }
+            bestI = i
           }
         }
+        if (bestI >= 0) onPlace(r.id, bestI, r.gpxPoints[bestI].lat, r.gpxPoints[bestI].lng)
       }
-      if (best) onPlace(best.raceId, best.index, best.lat, best.lng)
     },
   })
   useEffect(() => {
@@ -147,6 +154,7 @@ export default function ConstraintMap({
   placingPreset,
   onPlace,
   onRemove,
+  visibleRaces,
   logistics = [],
   placingLogiType = null,
   onPlaceLogi,
@@ -155,6 +163,9 @@ export default function ConstraintMap({
   const first = races.find((r) => r.gpxPoints.length > 0)?.gpxPoints
   const center: [number, number] = first ? [first[0].lat, first[0].lng] : [45.92, 6.87]
 
+  const isVisible = (raceId: string) => !visibleRaces || visibleRaces.has(raceId)
+  const shownRaces = races.filter((r) => isVisible(r.id))
+
   return (
     <>
       <style>{`html[data-theme="dark"] .leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }`}</style>
@@ -162,7 +173,7 @@ export default function ConstraintMap({
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
 
         {/* Trace coloured by steepness (slope preview) */}
-        {races.map((r) =>
+        {shownRaces.map((r) =>
           slopeSegments(r.gpxPoints).map((s, i) => (
             <Polyline
               key={`${r.id}-${i}`}
@@ -173,7 +184,7 @@ export default function ConstraintMap({
         )}
 
         <ClickHandler
-          races={races}
+          races={shownRaces}
           placingPreset={placingPreset}
           placingLogiType={placingLogiType}
           onPlace={onPlace}
@@ -183,6 +194,7 @@ export default function ConstraintMap({
         {/* Zone extent (covered stretch) for non-ravito constraints */}
         {constraints.map((c) => {
           if (c.type === 'RAVITO') return null
+          if (!isVisible(c.raceId)) return null
           const race = races.find((r) => r.id === c.raceId)
           if (!race) return null
           const span = zoneSpan(race.gpxPoints, c.indexStart, c.lengthM)
@@ -197,6 +209,7 @@ export default function ConstraintMap({
         })}
 
         {constraints.map((c) => {
+          if (!isVisible(c.raceId)) return null
           const preset = presetOf(c.type)
           return (
             <Marker key={c.id} position={[c.lat, c.lng]} icon={constraintIcon(preset.letter, preset.color)}>

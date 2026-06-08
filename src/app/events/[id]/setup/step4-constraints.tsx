@@ -83,6 +83,20 @@ export function Step4Constraints({
   const [placingPreset, setPlacingPreset] = useState<string | null>(null)
   const [placingLogiType, setPlacingLogiType] = useState<string | null>(null)
   const [zoneLength, setZoneLength] = useState(200)
+  // Which traces are shown — a click places on every visible course passing the
+  // spot, so hiding traces is how you target a single course on a shared section.
+  const [visibleRaces, setVisibleRaces] = useState<Set<string>>(
+    () => new Set(parsedRaces.map((r) => r.id))
+  )
+
+  function toggleRaceVisible(id: string) {
+    setVisibleRaces((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   function newId() {
     return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -166,6 +180,8 @@ export function Step4Constraints({
           <p className="text-sm mt-1" style={{ color: 'var(--color-ink-3)' }}>
             Marquez les portions étroites/techniques où l&apos;on ne peut pas doubler (les bouchons s&apos;y
             forment) et positionnez votre logistique terrain. Choisissez un type puis cliquez sur la carte.
+            Un clic marque la portion sur <b>toutes les courses visibles</b> qui passent à cet endroit —
+            masquez une trace ci-dessous pour ne viser qu&apos;une course.
           </p>
         </div>
         <button
@@ -389,6 +405,36 @@ export function Step4Constraints({
         })()}
       </div>
 
+      {/* Trace show/hide — only useful with several courses */}
+      {parsedRaces.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+            Tracés
+          </span>
+          {parsedRaces.map((r) => {
+            const on = visibleRaces.has(r.id)
+            return (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => toggleRaceVisible(r.id)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors"
+                style={{
+                  background: 'var(--color-bg-1)',
+                  border: '1px solid',
+                  borderColor: on ? r.color : 'var(--color-line)',
+                  opacity: on ? 1 : 0.45,
+                }}
+                title={on ? 'Masquer ce tracé' : 'Afficher ce tracé'}
+              >
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: r.color }} />
+                <span style={{ color: 'var(--color-ink-2)' }}>{r.name}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Map */}
       <div
         className="relative rounded-xl overflow-hidden"
@@ -401,6 +447,7 @@ export function Step4Constraints({
             placingPreset={placingPreset}
             onPlace={handlePlace}
             onRemove={handleRemove}
+            visibleRaces={visibleRaces}
             logistics={logistics}
             placingLogiType={placingLogiType}
             onPlaceLogi={handlePlaceLogi}
@@ -422,7 +469,8 @@ export function Step4Constraints({
           >
             <AlertTriangleIcon size={14} style={{ color: presetOf(placingPreset).color }} />
             <span className="text-xs" style={{ color: 'var(--color-ink)' }}>
-              Cliquez sur le tracé pour placer : <b>{presetOf(placingPreset).label}</b>
+              Cliquez sur le tracé : <b>{presetOf(placingPreset).label}</b>
+              <span style={{ color: 'var(--color-ink-4)' }}> · toutes les courses visibles qui passent là</span>
             </span>
           </div>
         )}
