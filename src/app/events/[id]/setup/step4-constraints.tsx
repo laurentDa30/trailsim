@@ -139,17 +139,50 @@ export function Step4Constraints({
   }
 
   const hasTracks = parsedRaces.some((r) => r.gpxPoints.length > 1)
+  const placedCount = constraints.length + logistics.length
+
+  async function resetAll() {
+    if (placedCount === 0) return
+    if (!confirm('Supprimer tous les points sensibles, ravitos et la logistique placés ?')) return
+    const toDelete = [...constraints]
+    setConstraints([])
+    onLogisticsChange([])
+    setPlacingPreset(null)
+    setPlacingLogiType(null)
+    await Promise.all(
+      toDelete.map((c) =>
+        fetch(`/api/events/${eventId}/races/${c.raceId}/segments/${c.id}`, { method: 'DELETE' }).catch(() => {})
+      )
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold" style={{ color: 'var(--color-ink)' }}>
-          Points sensibles & logistique
-        </h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-ink-3)' }}>
-          Marquez les portions étroites/techniques où l&apos;on ne peut pas doubler (les bouchons s&apos;y
-          forment) et positionnez votre logistique terrain. Choisissez un type puis cliquez sur la carte.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold" style={{ color: 'var(--color-ink)' }}>
+            Points sensibles & logistique
+          </h2>
+          <p className="text-sm mt-1" style={{ color: 'var(--color-ink-3)' }}>
+            Marquez les portions étroites/techniques où l&apos;on ne peut pas doubler (les bouchons s&apos;y
+            forment) et positionnez votre logistique terrain. Choisissez un type puis cliquez sur la carte.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={resetAll}
+          disabled={placedCount === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium shrink-0 transition-colors disabled:opacity-40"
+          style={{
+            background: 'var(--color-bg-2)',
+            border: '1px solid var(--color-line)',
+            color: 'var(--color-danger)',
+          }}
+          title="Effacer tout ce qui est placé"
+        >
+          <Trash2Icon size={13} />
+          Tout réinitialiser{placedCount > 0 ? ` (${placedCount})` : ''}
+        </button>
       </div>
 
       {/* Preset buttons — portions sensibles (snap to trace) */}
