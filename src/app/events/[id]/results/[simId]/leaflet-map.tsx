@@ -25,6 +25,9 @@ interface DrawItem {
   alpha: number
   /** Render as a soft radial blob (cloud) instead of a hard disc. */
   soft?: boolean
+  /** Optional outline (for crisp dots like runners). */
+  stroke?: string
+  strokeWidth?: number
 }
 
 /** "#RRGGBB" → "rgba(r,g,b,a)" */
@@ -96,6 +99,12 @@ function CanvasOverlay({ items }: { items: DrawItem[] }) {
           ctx.beginPath()
           ctx.arc(p.x, p.y, it.r, 0, Math.PI * 2)
           ctx.fill()
+          if (it.stroke) {
+            ctx.globalAlpha = 1
+            ctx.lineWidth = it.strokeWidth ?? 1
+            ctx.strokeStyle = it.stroke
+            ctx.stroke()
+          }
           ctx.globalAlpha = 1
         }
       }
@@ -374,9 +383,17 @@ export default function LeafletMap({
     // Live density — soft amber cloud where runners bunch up now
     for (const d of densityCircles)
       items.push({ lat: d.lat, lng: d.lng, r: Math.min(42, 18 + d.count * 1.1), fill: d.color, alpha: 0.5, soft: true })
-    // Runners — crisp dots on top
+    // Runners — crisp dots on top, with a light outline so they pop
     for (const rd of runnerDots)
-      items.push({ lat: rd.lat, lng: rd.lng, r: 2.5, fill: rd.color, alpha: 0.85 })
+      items.push({
+        lat: rd.lat,
+        lng: rd.lng,
+        r: 4,
+        fill: rd.color,
+        alpha: 0.95,
+        stroke: 'rgba(255,255,255,0.9)',
+        strokeWidth: 1.3,
+      })
     return items
   }, [heatPoints, sharedPoints, densityCircles, runnerDots])
 

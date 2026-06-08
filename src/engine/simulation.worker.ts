@@ -55,6 +55,24 @@ async function runSimulation(config: SimConfig): Promise<void> {
     const raceMeta = races.map((race) => {
       const pts = race.gpxPoints
       const totalDist = pts.length > 0 ? pts[pts.length - 1].dist : 0
+
+      // Smoothed slope over a ~100 m window. Per-point GPX slopes are very
+      // noisy (GPS altitude error of a few metres over ~20 m reads as 15-25%),
+      // and Tobler would over-penalise that noise, crushing speeds. Smoothing
+      // gives the real grade.
+      const SMOOTH_KM = 0.05 // 50 m each side
+      const smoothSlope: number[] = new Array(pts.length).fill(0)
+      for (let i = 0; i < pts.length; i++) {
+        let b = i
+        while (b > 0 && pts[i].dist - pts[b].dist < SMOOTH_KM) b--
+        let f = i
+        while (f < pts.length - 1 && pts[f].dist - pts[i].dist < SMOOTH_KM) f++
+        const dd = (pts[f].dist - pts[b].dist) * 1000
+        const s = dd > 0 ? ((pts[f].alt - pts[b].alt) / dd) * 100 : 0
+        smoothSlope[i] = Math.max(-40, Math.min(40, s))
+      }
+
+      // Elevation gain from the smoothed profile (less noise inflation)
       let totalElevGain = 0
       for (let i = 1; i < pts.length; i++) {
         const dElev = pts[i].alt - pts[i - 1].alt
@@ -95,7 +113,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
         binToSeg[b] = Math.min(pts.length - 1, segPtr)
       }
 
-      return { race, totalDist, totalElevGain, segmentCapacities, techMult, nBins, binToSeg }
+      return { race, totalDist, totalElevGain, segmentCapacities, techMult, smoothSlope, nBins, binToSeg }
     })
 
     // Determine global time range across all runs
@@ -236,7 +254,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
           if (state.finished) continue
 
           const raceMet = raceMeta.find((m) => m.race.id === runner.raceId)!
-          const { race, totalDist, totalElevGain, segmentCapacities, techMult } = raceMet
+          const { race, totalDist, totalElevGain, segmentCapacities, techMult, smoothSlope } = raceMet
 
           const raceStartTime = race.startOffset
           if (globalTime < raceStartTime) {
@@ -266,7 +284,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
           // Get current GPX point
           const segIdx = positionToSegmentIndex(state.position, pts.length)
           const pt = pts[segIdx]
-          const slopePct = pt.slope
+          const slopePct = smoothSlope[segIdx] ?? pt.slope
           const aspect = pt.aspect
 
           // Count runners in same segment ±5
