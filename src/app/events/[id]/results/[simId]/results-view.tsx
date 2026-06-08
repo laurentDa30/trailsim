@@ -316,11 +316,11 @@ export function ResultsView({
   const [layers, setLayers] = useState({
     runners: true,
     zones: true,
-    shared: true,
+    shared: false,
     collisions: true,
     density: true,
     heat: false,
-    logistique: true,
+    logistique: false,
   })
   const setLayer = useCallback((name: keyof typeof layers, on: boolean) => {
     setLayers((s) => ({ ...s, [name]: on }))

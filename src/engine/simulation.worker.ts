@@ -307,16 +307,16 @@ async function runSimulation(config: SimConfig): Promise<void> {
             fog: weather.fog,
           })
 
-          // Terrain technicality factor (slope-based proxy × placed constraints)
+          // Terrain factor = user-placed technical sections × per-profile
+          // climbing/descending ability. The grade's effect on speed is
+          // already handled by the Tobler slope factor in computeSpeed, so we
+          // no longer add a second slope-based penalty here (which double-
+          // counted and made hilly courses unrealistically slow). A mild
+          // footing penalty is kept only for very steep, low-skill descents.
           const absSlope = Math.abs(slopePct)
-          const slopeTerrain = absSlope > 30
-            ? 0.5 + (1 - runner.techSkill) * 0.2
-            : absSlope > 15
-            ? 0.7 + runner.techSkill * 0.15
-            : 1.0
-          // Per-profile climbing / descending ability (higher = better)
+          const footing = absSlope > 25 ? 0.85 + runner.techSkill * 0.15 : 1.0
           const abilityFactor = slopePct >= 0 ? runner.climbCoeff : runner.descentCoeff
-          const terrainFactor = slopeTerrain * (techMult[segIdx] ?? 1) * abilityFactor
+          const terrainFactor = footing * (techMult[segIdx] ?? 1) * abilityFactor
 
           // Speed in km/h
           const speed = computeSpeed(
