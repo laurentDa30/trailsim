@@ -35,8 +35,6 @@ const INITIAL_STATE: SimulationState = {
   estimatedSecondsLeft: 0,
 }
 
-const RESULT_STORAGE_KEY = 'trailsim:lastResult'
-
 // ---------------------------------------------------------------------------
 // Main hook – uses the real Web Worker engine
 // ---------------------------------------------------------------------------
@@ -47,33 +45,17 @@ const RESULT_STORAGE_KEY = 'trailsim:lastResult'
  * Manages the TrailSim Web Worker lifecycle:
  * - Spawns a module Worker pointing at simulation.worker.ts
  * - Feeds real PROGRESS messages into SimulationState
- * - Persists the final CompressedSimulationResult to localStorage
  * - Exposes the same { state, run, reset } interface used by the simulate page
  *
  * The `logLines` array is consumed client-side (the worker does not produce
  * text logs) so they are drip-fed proportionally to progress, just like before.
  */
 export function useSimulation() {
-  const [state, setState] = useState<SimulationState>(() => {
-    // Try to restore a previous result from localStorage on first render
-    if (typeof window === 'undefined') return INITIAL_STATE
-    try {
-      const raw = localStorage.getItem(RESULT_STORAGE_KEY)
-      if (raw) {
-        const result = JSON.parse(raw) as CompressedSimulationResult
-        return {
-          ...INITIAL_STATE,
-          status: 'done',
-          progress: 100,
-          result,
-          zonesDetected: result.riskMap?.length ?? 0,
-          runnersSimulated: result.runnersData?.length ?? 0,
-          precision: 90.0,
-        }
-      }
-    } catch { /* ignore */ }
-    return INITIAL_STATE
-  })
+  // Always start clean. A stale result must never be restored across events:
+  // the simulate page auto-saves `state.result` to the DB as soon as it sees
+  // `status: 'done'`, so a restored result would clobber a fresh simulation
+  // with another run's runners/collision windows ("Course supprimée").
+  const [state, setState] = useState<SimulationState>(INITIAL_STATE)
 
   const workerRef = useRef<Worker | null>(null)
   const startTimeRef = useRef<number>(0)
@@ -151,11 +133,6 @@ export function useSimulation() {
       if (msg.type === 'DONE') {
         const result = msg.result
 
-        // Persist result
-        try {
-          localStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(result))
-        } catch { /* quota exceeded */ }
-
         // Flush remaining log lines
         const remainingLogs = logLinesRef.current.slice(logIndexRef.current)
 
@@ -207,7 +184,6 @@ export function useSimulation() {
       workerRef.current.terminate()
       workerRef.current = null
     }
-    try { localStorage.removeItem(RESULT_STORAGE_KEY) } catch { /* ignore */ }
     setState(INITIAL_STATE)
   }, [])
 

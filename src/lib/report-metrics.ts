@@ -452,6 +452,8 @@ export interface RaceFinishFlow {
   medianSec: number | null
   lastSec: number | null
   bins: number[] // counts aligned to the shared bin grid
+  cutoffSec: number | null // barrière horaire as absolute T+ seconds (null = none)
+  lateCount: number // finishers arriving after the cut-off
 }
 
 /**
@@ -462,7 +464,9 @@ export interface RaceFinishFlow {
 export function computeFinishFlow(
   result: CompressedSimulationResult,
   races: RaceLite[],
-  binSec = 600
+  binSec = 600,
+  // Optional barrière horaire per race, as absolute T+ seconds from event T0.
+  cutoffByRace?: Record<string, number | null | undefined>
 ): {
   perRace: RaceFinishFlow[]
   combined: number[]
@@ -500,6 +504,8 @@ export function computeFinishFlow(
       bins[b]++
       combined[b]++
     }
+    const cutoffSec = cutoffByRace?.[race.id] ?? null
+    const lateCount = cutoffSec != null ? finishes.filter((s) => s > cutoffSec).length : 0
     return {
       raceId: race.id,
       name: race.name,
@@ -509,6 +515,8 @@ export function computeFinishFlow(
       medianSec: quantile(finishes, 0.5),
       lastSec: finishes[finishes.length - 1] ?? null,
       bins,
+      cutoffSec,
+      lateCount,
     }
   })
 

@@ -11,6 +11,8 @@
 // of the two courses' speed-band distribution, rounded to 100 %.
 //   Élite 1 · Confirmé 9 · Intermédiaire 39 · Débutant 42 · Marcheur 9
 // Organisers can still adjust per race in step 2; saved configs keep their own.
+// Abandon rates are tuned to half the raw observed DNF rate (calib v3), and the
+// Marcheur floor speed is 5 km/h (a sustained fast-walk minimum).
 export const DEFAULT_ARCHETYPES = [
   {
     id: 'elite',
@@ -22,7 +24,7 @@ export const DEFAULT_ARCHETYPES = [
     fatiguePlancher: 80,
     techLevel: 95,
     ravito: 30,
-    abandon: 2,
+    abandon: 1,
   },
   {
     id: 'confirme',
@@ -34,7 +36,7 @@ export const DEFAULT_ARCHETYPES = [
     fatiguePlancher: 70,
     techLevel: 75,
     ravito: 60,
-    abandon: 5,
+    abandon: 2.5,
   },
   {
     id: 'intermediaire',
@@ -46,7 +48,7 @@ export const DEFAULT_ARCHETYPES = [
     fatiguePlancher: 60,
     techLevel: 55,
     ravito: 90,
-    abandon: 8,
+    abandon: 4,
   },
   {
     id: 'debutant',
@@ -58,19 +60,19 @@ export const DEFAULT_ARCHETYPES = [
     fatiguePlancher: 50,
     techLevel: 40,
     ravito: 120,
-    abandon: 12,
+    abandon: 6,
   },
   {
     id: 'marcheur',
     label: 'Marcheur',
     color: '#A78BFA',
     percentage: 9,
-    speedMin: 4,
+    speedMin: 5,
     speedMax: 6,
     fatiguePlancher: 40,
     techLevel: 25,
     ravito: 180,
-    abandon: 15,
+    abandon: 7.5,
   },
 ]
 
@@ -89,7 +91,7 @@ export type PelotonConfigs = Record<string, RaceConfig>
  * is refreshed once to the new tuning (keeping the organiser's distribution),
  * so central recalibrations apply automatically without manual slider edits.
  */
-export const PELOTON_CALIB_VERSION = 2
+export const PELOTON_CALIB_VERSION = 3
 
 /**
  * Re-apply the current DEFAULT_ARCHETYPES tuning (speeds + physical params) to

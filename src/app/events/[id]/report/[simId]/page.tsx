@@ -24,6 +24,22 @@ function fmtClock(s: number) {
   return `${h}h${String(m).padStart(2, '0')}`
 }
 
+/** Add `sec` seconds to an "HH:MM" wall-clock, wrapping at 24 h → "HH:MM". */
+function addSecondsToClock(clock: string, sec: number): string | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(clock)
+  if (!m) return null
+  const total = (parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + sec) % 86400
+  const h = Math.floor(total / 3600)
+  const mm = Math.floor((total % 3600) / 60)
+  return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+}
+
+/** Format a T+ second as real wall-clock when an anchor is set, else "T+ XhYY". */
+function fmtArrival(s: number, startClock: string | null): string {
+  if (startClock) return addSecondsToClock(startClock, s) ?? fmtClock(s)
+  return fmtClock(s)
+}
+
 function fmtDate(d: Date | null | undefined): string {
   if (!d) return '—'
   return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(d))
@@ -158,7 +174,19 @@ export default async function ReportPage({ params }: PageProps) {
       })
     : []
   // FEATURE 5 — finish-line arrival flow.
-  const finishFlow = result ? computeFinishFlow(result, racesLite, 600) : null
+  // Barrière horaire per race → absolute T+ seconds (race départure offset +
+  // its cut-off duration), so the chart/table can flag finishers hors délai.
+  const departStartMin = new Map(departs.map((d) => [d.id, d.startTime ?? 0]))
+  const cutoffByRace: Record<string, number | null> = {}
+  for (const r of parsedRaces) {
+    cutoffByRace[r.id] =
+      r.cutoffMinutes != null
+        ? ((departStartMin.get(r.id) ?? r.startTime) + r.cutoffMinutes) * 60
+        : null
+  }
+  const finishFlow = result ? computeFinishFlow(result, racesLite, 600, cutoffByRace) : null
+  // T0 wall-clock anchor for real arrival times (null → show T+ offsets).
+  const startClock: string | null = sim.event.startClock ?? null
   // FEATURE 2 — per-km passage windows for poste staffing (passed to the map).
   const passageByRace: Record<string, ReturnType<typeof computePassageByKmBin>> = {}
   if (result) for (const r of racesLite) passageByRace[r.id] = computePassageByKmBin(result, r)
@@ -547,12 +575,18 @@ export default async function ReportPage({ params }: PageProps) {
             <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10, lineHeight: 1.5 }}>
               Arrivants par tranche de {finishFlow.binSec / 60} min (empilé par course) — pour
               dimensionner l&apos;arrivée, le chrono et le ravito final.
+              {startClock
+                ? ` Heures réelles (départ T0 à ${startClock}).`
+                : ' Heures en T+ depuis le départ (renseignez l’heure T0 à l’étape Courses pour l’heure réelle).'}
+              {finishFlow.perRace.some((rf) => rf.cutoffSec != null) && (
+                ' Le trait pointillé marque la barrière horaire de chaque course.'
+              )}
             </p>
-            <FinishFlowChart flow={finishFlow} />
+            <FinishFlowChart flow={finishFlow} startClock={startClock} />
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12, fontSize: '12px' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
-                  {['Course', 'Arrivants', '1ère', 'Médiane', 'Dernière'].map((h) => (
+                  {['Course', 'Arrivants', '1ère', 'Médiane', 'Dernière', 'Barrière', 'Hors délai'].map((h) => (
                     <th key={h} style={thStyle}>{h}</th>
                   ))}
                 </tr>
@@ -567,9 +601,13 @@ export default async function ReportPage({ params }: PageProps) {
                       </span>
                     </td>
                     <td style={tdMono}>{rf.total}</td>
-                    <td style={tdMono}>{rf.firstSec != null ? fmtClock(rf.firstSec) : '—'}</td>
-                    <td style={tdMono}>{rf.medianSec != null ? fmtClock(rf.medianSec) : '—'}</td>
-                    <td style={tdMono}>{rf.lastSec != null ? fmtClock(rf.lastSec) : '—'}</td>
+                    <td style={tdMono}>{rf.firstSec != null ? fmtArrival(rf.firstSec, startClock) : '—'}</td>
+                    <td style={tdMono}>{rf.medianSec != null ? fmtArrival(rf.medianSec, startClock) : '—'}</td>
+                    <td style={tdMono}>{rf.lastSec != null ? fmtArrival(rf.lastSec, startClock) : '—'}</td>
+                    <td style={tdMono}>{rf.cutoffSec != null ? fmtArrival(rf.cutoffSec, startClock) : '—'}</td>
+                    <td style={{ ...tdMono, color: rf.lateCount > 0 ? '#DC2626' : '#374151' }}>
+                      {rf.cutoffSec != null ? rf.lateCount : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -742,9 +780,15 @@ function PriorityBadge({ p }: { p: 'haute' | 'moyenne' | 'faible' }) {
 }
 
 /** Stacked bar chart of finishers per time bin (server-rendered SVG). */
-function FinishFlowChart({ flow }: { flow: ReturnType<typeof computeFinishFlow> }) {
+function FinishFlowChart({
+  flow,
+  startClock,
+}: {
+  flow: ReturnType<typeof computeFinishFlow>
+  startClock: string | null
+}) {
   const W = 700
-  const H = 180
+  const H = 184
   const padL = 4
   const padR = 4
   const chartTop = 10
@@ -754,6 +798,8 @@ function FinishFlowChart({ flow }: { flow: ReturnType<typeof computeFinishFlow> 
   const barW = (W - padL - padR) / n
   const peak = flow.peakCombined
   const labelEvery = Math.max(1, Math.ceil(n / 8))
+  const spanSec = n * flow.binSec
+  const xAt = (sec: number) => padL + (Math.max(0, Math.min(spanSec, sec)) / spanSec) * (W - padL - padR)
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
@@ -775,12 +821,31 @@ function FinishFlowChart({ flow }: { flow: ReturnType<typeof computeFinishFlow> 
             })}
             {b % labelEvery === 0 && (
               <text x={x + barW / 2} y={baseY + 12} fontSize="9" fill="#9ca3af" textAnchor="middle">
-                {`${Math.floor(g.tStart / 3600)}h${String(Math.floor((g.tStart % 3600) / 60)).padStart(2, '0')}`}
+                {fmtArrival(g.tStart, startClock)}
               </text>
             )}
           </g>
         )
       })}
+      {/* Barrière horaire markers (dashed vertical line per race) */}
+      {flow.perRace.map((rf) =>
+        rf.cutoffSec != null && rf.cutoffSec <= spanSec ? (
+          <g key={`co-${rf.raceId}`}>
+            <line
+              x1={xAt(rf.cutoffSec)}
+              y1={chartTop}
+              x2={xAt(rf.cutoffSec)}
+              y2={baseY}
+              stroke={rf.color}
+              strokeWidth="1.2"
+              strokeDasharray="3 3"
+            />
+            <text x={xAt(rf.cutoffSec)} y={baseY + 22} fontSize="8" fill={rf.color} textAnchor="middle">
+              ⛳ {fmtArrival(rf.cutoffSec, startClock)}
+            </text>
+          </g>
+        ) : null
+      )}
     </svg>
   )
 }

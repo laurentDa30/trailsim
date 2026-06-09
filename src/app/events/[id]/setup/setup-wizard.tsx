@@ -34,7 +34,7 @@ type RaceWithSegments = Race & { segments: Segment[] }
 type SimulationWithProfiles = Simulation & { runnerProfiles: RunnerProfile[] }
 
 interface SetupWizardProps {
-  event: { id: string; name: string; location?: string | null }
+  event: { id: string; name: string; location?: string | null; startClock?: string | null }
   races: RaceWithSegments[]
   simulation: SimulationWithProfiles | null
 }
@@ -43,6 +43,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
   const router = useRouter()
   const [step, setStep] = useState<Step>(1)
   const [races, setRaces] = useState(initialRaces)
+  const [startClock, setStartClock] = useState<string | null>(event.startClock ?? null)
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState<string | null>(null)
 
@@ -273,6 +274,8 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               onUpdate={(rs) => setRaces(rs as RaceWithSegments[])}
               resources={resources}
               onResourcesChange={setResources}
+              startClock={startClock}
+              onStartClockChange={setStartClock}
             />
           )}
           {step === 2 && (

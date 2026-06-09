@@ -6,6 +6,8 @@ const RaceUpdateSchema = z.object({
   name: z.string().min(1).optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   startTime: z.number().int().min(0).optional(),
+  // 0 / null both mean "no cut-off"; stored as null for clarity.
+  cutoffMinutes: z.number().int().min(0).max(2880).nullable().optional(),
 })
 
 async function authorizeRace(
@@ -39,7 +41,11 @@ export async function PATCH(
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
 
-    const updated = await db.race.update({ where: { id: raceId }, data: parsed.data })
+    // Normalise cutoff: 0 → null ("no cut-off").
+    const data = { ...parsed.data }
+    if (data.cutoffMinutes === 0) data.cutoffMinutes = null
+
+    const updated = await db.race.update({ where: { id: raceId }, data })
     return Response.json(updated)
   } catch (error) {
     console.error("[PATCH /api/events/[id]/races/[raceId]]", error)

@@ -10,6 +10,8 @@ import {
   LoaderIcon,
   CheckIcon,
   Trash2Icon,
+  ClockIcon,
+  FlagIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -45,12 +47,24 @@ export interface Resources {
   barrieres: number
 }
 
+/** Add `min` minutes to an "HH:MM" clock, wrapping at 24 h. Returns "HH:MM". */
+function addMinutesToClock(clock: string, min: number): string | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(clock)
+  if (!m) return null
+  const total = (parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + min) % (24 * 60)
+  const h = Math.floor(total / 60)
+  const mm = total % 60
+  return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+}
+
 interface Step1CoursesProps {
   eventId: string
   races: Race[]
   onUpdate: (races: Race[]) => void
   resources: Resources
   onResourcesChange: (r: Resources) => void
+  startClock: string | null
+  onStartClockChange: (v: string | null) => void
 }
 
 export function Step1Courses({
@@ -59,6 +73,8 @@ export function Step1Courses({
   onUpdate,
   resources,
   onResourcesChange,
+  startClock,
+  onStartClockChange,
 }: Step1CoursesProps) {
   const [localRaces, setLocalRaces] = useState<Race[]>(races)
   // Reflect already-imported GPX tracks (so returning to this step keeps the "imported" state).
@@ -88,12 +104,25 @@ export function Step1Courses({
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
+  // Persist the event T0 wall-clock (debounced — typed in a time input).
+  const clockTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function persistStartClock(value: string | null) {
+    if (clockTimer.current) clearTimeout(clockTimer.current)
+    clockTimer.current = setTimeout(() => {
+      fetch(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startClock: value }),
+      }).catch(() => {})
+    }, 350)
+  }
+
   // Persist race scalar fields to the DB. `name` is debounced (typed), while
-  // discrete picks (color, startTime) are persisted immediately so they are
-  // committed before the user launches the simulation.
+  // discrete picks (color, startTime, cutoffMinutes) are persisted immediately so
+  // they are committed before the user launches the simulation.
   function persistRace(
     id: string,
-    patch: Partial<Pick<Race, 'name' | 'color' | 'startTime'>>,
+    patch: Partial<Pick<Race, 'name' | 'color' | 'startTime' | 'cutoffMinutes'>>,
     immediate = false
   ) {
     const send = () =>
@@ -118,12 +147,13 @@ export function Step1Courses({
     onUpdate(updated)
 
     // Only persist the editable scalar fields
-    const persistable: Partial<Pick<Race, 'name' | 'color' | 'startTime'>> = {}
+    const persistable: Partial<Pick<Race, 'name' | 'color' | 'startTime' | 'cutoffMinutes'>> = {}
     if (updates.name !== undefined) persistable.name = updates.name
     if (updates.color !== undefined) persistable.color = updates.color
     if (updates.startTime !== undefined) persistable.startTime = updates.startTime
+    if (updates.cutoffMinutes !== undefined) persistable.cutoffMinutes = updates.cutoffMinutes
     if (Object.keys(persistable).length > 0) {
-      // color / startTime are discrete clicks → persist immediately; name is debounced
+      // color / startTime / cutoff are discrete clicks → persist immediately; name is debounced
       const immediate = updates.name === undefined
       persistRace(id, persistable, immediate)
     }
@@ -205,6 +235,29 @@ export function Step1Courses({
         </p>
       </div>
 
+      {/* Event T0 wall-clock — anchors the real start of each wave and the real
+          arrival times shown in the report's « Flux d'arrivée ». */}
+      <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg-1)] p-4 flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <ClockIcon size={16} className="text-[var(--color-lime)]" />
+          <span className="text-sm font-medium text-[var(--color-ink)]">Heure de départ (T0)</span>
+        </div>
+        <input
+          type="time"
+          value={startClock ?? ''}
+          onChange={(e) => {
+            const v = e.target.value || null
+            onStartClockChange(v)
+            persistStartClock(v)
+          }}
+          className="bg-[var(--color-bg-2)] border border-[var(--color-line)] rounded-lg px-3 py-1.5 text-[var(--color-ink)] text-sm focus:outline-none focus:border-[var(--color-lime)] transition-colors"
+        />
+        <span className="text-xs text-[var(--color-ink-4)] flex-1 min-w-[200px]">
+          Heure réelle de la 1ʳᵉ vague. Les arrivées du rapport seront affichées en heure réelle
+          (sinon en T+). Chaque course part à T0 + son offset.
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {localRaces.map((race) => {
           const gpx = gpxStates[race.id]
@@ -273,6 +326,13 @@ export function Step1Courses({
                       </button>
                     ))}
                   </div>
+                  {/* Real départure derived from T0 + offset */}
+                  {startClock && (
+                    <span className="flex items-center gap-1 text-xs text-[var(--color-lime)] font-medium">
+                      <ClockIcon size={11} />
+                      {addMinutesToClock(startClock, race.startTime) ?? '—'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Distance + D+ badges */}
@@ -286,6 +346,30 @@ export function Step1Courses({
                     {race.elevGain > 0 ? `+${race.elevGain} m` : '— m'}
                   </span>
                 </div>
+              </div>
+
+              {/* Barrière horaire (temps limite) — minutes from this race's start */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="flex items-center gap-1.5 text-xs text-[var(--color-ink-3)]">
+                  <FlagIcon size={12} />
+                  Barrière horaire
+                </span>
+                <CutoffStep
+                  value={race.cutoffMinutes ?? 0}
+                  onChange={(v) => updateRace(race.id, { cutoffMinutes: v === 0 ? null : v })}
+                />
+                {race.cutoffMinutes && startClock ? (
+                  <span className="text-xs text-[var(--color-ink-4)]">
+                    ferme à{' '}
+                    <span className="text-[var(--color-ink-2)] font-medium">
+                      {addMinutesToClock(startClock, race.startTime + race.cutoffMinutes) ?? '—'}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-[var(--color-ink-4)]">
+                    {race.cutoffMinutes ? 'temps limite après le départ' : 'aucune (optionnel)'}
+                  </span>
+                )}
               </div>
 
               {/* GPX upload */}
@@ -395,6 +479,40 @@ export function Step1Courses({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Cut-off stepper in minutes, displayed as "Xh YY" (or "Aucune" at 0). */
+function CutoffStep({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const STEP = 15
+  const label =
+    value === 0
+      ? 'Aucune'
+      : value % 60 === 0
+        ? `${value / 60}h00`
+        : `${Math.floor(value / 60)}h${String(value % 60).padStart(2, '0')}`
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(0, value - STEP))}
+        className="w-7 h-7 rounded-lg bg-[var(--color-bg-2)] border border-[var(--color-line)] text-[var(--color-ink-2)] hover:text-[var(--color-ink)] transition-colors flex items-center justify-center text-base font-medium"
+        aria-label="Diminuer la barrière"
+      >
+        −
+      </button>
+      <span className="min-w-[68px] text-center text-sm font-medium text-[var(--color-ink)] tabular-nums">
+        {label}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(2880, value + STEP))}
+        className="w-7 h-7 rounded-lg bg-[var(--color-bg-2)] border border-[var(--color-line)] text-[var(--color-ink-2)] hover:text-[var(--color-ink)] transition-colors flex items-center justify-center text-base font-medium"
+        aria-label="Augmenter la barrière"
+      >
+        +
+      </button>
     </div>
   )
 }

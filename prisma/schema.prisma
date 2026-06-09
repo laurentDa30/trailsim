@@ -55,6 +55,10 @@ model Event {
   description String?
   date        DateTime?
   location    String?
+  // Wall-clock of T0 ("HH:MM"), i.e. the départure of the first wave. Each race
+  // starts at T0 + its startTime offset; used to show real arrival times in the
+  // report's "FLUX D'ARRIVÉE" section. Null = times shown as T+ offsets only.
+  startClock  String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   userId      String
@@ -70,6 +74,11 @@ model Race {
   elevGain   Int       @default(0)
   elevLoss   Int       @default(0)
   startTime  Int       @default(0)
+  // Barrière horaire / temps limite: minutes from THIS race's départure after
+  // which the course closes. Null = no cut-off configured. Display-only (drawn
+  // on the report's finish-flow chart + "hors délai" count); does not affect the
+  // engine.
+  cutoffMinutes Int?
   gpxRaw     String?
   gpxPoints  String    @default("[]")
   color      String    @default("#7CB518")
