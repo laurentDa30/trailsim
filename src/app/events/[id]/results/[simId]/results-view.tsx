@@ -391,6 +391,10 @@ export function ResultsView({
     setPlacedLogistics((prev) => prev.filter((l) => l.id !== id))
   }, [])
 
+  const updateLogiLabel = useCallback((id: string, label: string) => {
+    setPlacedLogistics((prev) => prev.map((l) => (l.id === id ? { ...l, label } : l)))
+  }, [])
+
   // Count placed logistics per type
   const logiCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -1265,7 +1269,8 @@ export function ResultsView({
             <div className="p-3 flex flex-col gap-3">
               <p className="text-[10px]" style={{ color: 'var(--color-ink-4)' }}>
                 Choisissez un type puis cliquez sur la carte. Les marqueurs sont déplaçables et
-                sauvegardés automatiquement.
+                sauvegardés automatiquement. Donnez-leur un nom dans la liste ci-dessous — il
+                apparaîtra sur la carte du rapport PDF.
               </p>
 
               {/* Type buttons */}
@@ -1316,14 +1321,21 @@ export function ResultsView({
                         <span
                           className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold text-white"
                           style={{ background: meta.color }}
+                          title={meta.label}
                         >
                           {meta.letter}
                         </span>
-                        <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-ink-3)' }}>
-                          {meta.label}
-                        </span>
+                        <input
+                          type="text"
+                          value={l.label ?? ''}
+                          placeholder={meta.label}
+                          onChange={(e) => updateLogiLabel(l.id, e.target.value)}
+                          className="flex-1 min-w-0 bg-transparent text-xs px-1 py-0.5 rounded border border-transparent focus:outline-none focus:border-[var(--color-line)] focus:bg-[var(--color-bg-2)] transition-colors"
+                          style={{ color: 'var(--color-ink-2)' }}
+                          title={`${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}`}
+                        />
                         <span
-                          className="text-[10px] font-mono"
+                          className="text-[10px] font-mono shrink-0"
                           style={{ color: 'var(--color-ink-4)' }}
                         >
                           {l.lat.toFixed(3)}, {l.lng.toFixed(3)}
@@ -1333,7 +1345,7 @@ export function ResultsView({
                           onClick={() => removeLogi(l.id)}
                           style={{ color: 'var(--color-ink-4)' }}
                           aria-label="Supprimer"
-                          className="hover:text-[var(--color-danger)] transition-colors"
+                          className="hover:text-[var(--color-danger)] transition-colors shrink-0"
                         >
                           <Trash2Icon size={12} />
                         </button>

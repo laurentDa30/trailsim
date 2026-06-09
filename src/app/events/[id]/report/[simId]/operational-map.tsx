@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { LOGI_TYPES, logiStorageKey, logiTypeOf, type PlacedLogi } from '@/lib/logistics'
+import { LOGI_TYPES, logiStorageKey, logiTypeOf, logiDisplayName, type PlacedLogi } from '@/lib/logistics'
 
 // ── Plain data shapes passed from the server (no Prisma / engine types) ──
 export interface OpMapPoint {
@@ -250,11 +250,28 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
             logistics.map((l) => {
               const { x, y } = proj.project(l.lat, l.lng)
               const meta = logiTypeOf(l.type)
+              const name = logiDisplayName(l)
               return (
                 <g key={l.id}>
+                  {/* Hover tooltip (browser): name + GPS */}
+                  <title>{`${name} — ${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}`}</title>
                   <circle cx={x} cy={y} r="9" fill={meta.color} stroke="#fff" strokeWidth="2" />
                   <text x={x} y={y + 3.5} textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">
                     {meta.letter}
+                  </text>
+                  {/* Name label, with a white halo for legibility on the trace */}
+                  <text
+                    x={x + 12}
+                    y={y + 3.5}
+                    fontSize="11"
+                    fontWeight="600"
+                    fill="#1f2937"
+                    stroke="#fff"
+                    strokeWidth="3"
+                    paintOrder="stroke"
+                    style={{ strokeLinejoin: 'round' }}
+                  >
+                    {name}
                   </text>
                 </g>
               )
@@ -372,6 +389,8 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
               <tbody>
                 {logistics.map((l, i) => {
                   const meta = logiTypeOf(l.type)
+                  const name = logiDisplayName(l)
+                  const hasCustom = !!l.label?.trim()
                   const near = nearest(races, l.lat, l.lng)
                   return (
                     <tr key={l.id} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 ? '#fafafa' : '#fff' }}>
@@ -389,11 +408,15 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',
+                              flexShrink: 0,
                             }}
                           >
                             {meta.letter}
                           </span>
-                          {meta.label}
+                          {name}
+                          {hasCustom && (
+                            <span style={{ fontWeight: 400, color: '#9ca3af', fontSize: 11 }}>· {meta.label}</span>
+                          )}
                         </span>
                       </td>
                       <td style={{ padding: '7px 10px', color: '#374151' }}>

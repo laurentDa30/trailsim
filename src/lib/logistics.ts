@@ -10,6 +10,8 @@ export interface PlacedLogi {
   type: string
   lat: number
   lng: number
+  /** Optional custom name overriding the type label (e.g. "Poste croix 4×4"). */
+  label?: string
 }
 
 export const LOGI_TYPES: LogiType[] = [
@@ -22,6 +24,12 @@ export const LOGI_TYPES: LogiType[] = [
 
 export function logiTypeOf(type: string): LogiType {
   return LOGI_TYPES.find((t) => t.type === type) ?? LOGI_TYPES[0]
+}
+
+/** Display name for a placed item: its custom label if set, else the type label. */
+export function logiDisplayName(l: PlacedLogi): string {
+  const custom = l.label?.trim()
+  return custom && custom.length > 0 ? custom : logiTypeOf(l.type).label
 }
 
 export function logiStorageKey(simId: string): string {

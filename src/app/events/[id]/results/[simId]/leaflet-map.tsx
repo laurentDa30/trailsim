@@ -15,7 +15,7 @@ import L from 'leaflet'
 import { useEffect, useMemo, useRef } from 'react'
 import 'leaflet/dist/leaflet.css'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
-import { logiTypeOf, type PlacedLogi } from './logistics'
+import { logiTypeOf, logiDisplayName, type PlacedLogi } from './logistics'
 
 interface DrawItem {
   lat: number
@@ -586,6 +586,7 @@ export default function LeafletMap({
         {/* Placed logistics markers (draggable) */}
         {showLogistics && placedLogistics.map((logi) => {
           const meta = logiTypeOf(logi.type)
+          const name = logiDisplayName(logi)
           return (
             <Marker
               key={logi.id}
@@ -600,11 +601,21 @@ export default function LeafletMap({
                 },
               }}
             >
+              {/* Hover: name + GPS coordinates */}
+              <Tooltip direction="top" offset={[0, -10]}>
+                <div style={{ fontWeight: 700, color: meta.color }}>{name}</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
+                  {logi.lat.toFixed(5)}, {logi.lng.toFixed(5)}
+                </div>
+              </Tooltip>
               <Popup>
                 <div style={{ minWidth: 140 }}>
                   <div style={{ fontWeight: 700, marginBottom: 4, color: meta.color }}>
-                    {meta.label}
+                    {name}
                   </div>
+                  {logi.label?.trim() && (
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{meta.label}</div>
+                  )}
                   <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
                     {logi.lat.toFixed(5)}, {logi.lng.toFixed(5)}
                   </div>
