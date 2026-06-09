@@ -154,6 +154,66 @@ export function computePerRaceStats(
   })
 }
 
+export interface ClusteredCollision {
+  raceIds: string[]
+  segmentIndex: number
+  tStart: number
+  tEnd: number
+  peak: number
+  dist: number
+}
+
+/**
+ * Merge adjacent collision windows of the SAME race-pair into one event. The
+ * engine emits one window per 150 m bin, so a single catch-up on a shared
+ * section produces dozens of near-identical rows (km 2.5, 2.7, 2.8 …). Group
+ * by race-pair, then by distance proximity, keeping the union time-span and the
+ * peak overlap — so the report and recommendations show events, not bins.
+ */
+export function clusterCollisionWindows(
+  windows: CompressedSimulationResult['collisionWindows'],
+  races: RaceLite[],
+  gapKm = 0.6
+): ClusteredCollision[] {
+  const distOf = (raceId: string, seg: number) =>
+    races.find((r) => r.id === raceId)?.gpxPoints[seg]?.dist ?? 0
+
+  // group by unordered race-pair
+  const byPair = new Map<string, (ClusteredCollision & { _dist: number })[]>()
+  for (const w of windows) {
+    const key = [...w.raceIds].sort().join('|')
+    const dist = distOf(w.raceIds[0], w.segmentIndex)
+    if (!byPair.has(key)) byPair.set(key, [])
+    byPair.get(key)!.push({ ...w, dist, _dist: dist })
+  }
+
+  const out: ClusteredCollision[] = []
+  for (const list of byPair.values()) {
+    list.sort((a, b) => a._dist - b._dist)
+    let cluster: typeof list = []
+    const flush = () => {
+      if (cluster.length === 0) return
+      const best = cluster.reduce((m, c) => (c.peak > m.peak ? c : m), cluster[0])
+      out.push({
+        raceIds: best.raceIds,
+        segmentIndex: best.segmentIndex,
+        dist: best.dist,
+        tStart: Math.min(...cluster.map((c) => c.tStart)),
+        tEnd: Math.max(...cluster.map((c) => c.tEnd)),
+        peak: Math.max(...cluster.map((c) => c.peak)),
+      })
+      cluster = []
+    }
+    for (const w of list) {
+      if (cluster.length > 0 && w._dist - cluster[cluster.length - 1]._dist > gapKm) flush()
+      cluster.push(w)
+    }
+    flush()
+  }
+  // strongest first
+  return out.sort((a, b) => b.peak - a.peak)
+}
+
 export type Priority = 'haute' | 'moyenne' | 'faible'
 
 export interface Recommendation {
@@ -215,11 +275,10 @@ export function computeRecommendations(
     }
   }
 
-  // 2) Inter-race meetings → suggest staggering a start
-  for (const cw of result.collisionWindows) {
+  // 2) Inter-race meetings → suggest staggering a start (clustered: one reco per event)
+  for (const cw of clusterCollisionWindows(result.collisionWindows, races)) {
     if (cw.peak < 18) continue
-    const r0 = races.find((r) => r.id === cw.raceIds[0])
-    const dist = r0?.gpxPoints[cw.segmentIndex]?.dist
+    const dist = cw.dist
     const names = cw.raceIds.map(raceName).join(' ↔ ')
     // suggest a shift roughly half the overlap window, rounded to 5 min
     const overlapMin = (cw.tEnd - cw.tStart) / 60

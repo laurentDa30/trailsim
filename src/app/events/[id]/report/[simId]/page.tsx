@@ -3,6 +3,7 @@ import db from '@/lib/db'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
 import {
   clusterRiskZones,
+  clusterCollisionWindows,
   computePerRaceStats,
   computeRecommendations,
   type RaceLite,
@@ -82,7 +83,8 @@ export default async function ReportPage({ params }: PageProps) {
   const recommendations = result ? computeRecommendations(result, racesLite, clustered, perRace) : []
 
   const bouchons = [...clustered].sort((a, b) => b.riskScore - a.riskScore)
-  const collisionWindows = result?.collisionWindows ?? []
+  // Clustered: one row per real catch-up event, not one per 150 m bin.
+  const collisionWindows = result ? clusterCollisionWindows(result.collisionWindows, racesLite) : []
 
   // Global headline figures
   const firstFinish = perRace
@@ -385,6 +387,13 @@ export default async function ReportPage({ params }: PageProps) {
             )}
           </tbody>
         </table>
+        {bouchons.length > 0 && (
+          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: -16, marginBottom: 28, lineHeight: 1.5 }}>
+            « Densité pic » = moyenne sur l&apos;ensemble des simulations (valeur statistique).
+            L&apos;« affluence » de la synthèse par course est le pic instantané du scénario affiché —
+            les deux unités /150 m ne sont donc pas directement comparables.
+          </p>
+        )}
 
         {/* ── CROISEMENTS INTER-COURSES ── */}
         <SectionTitle>CROISEMENTS INTER-COURSES</SectionTitle>
@@ -400,7 +409,7 @@ export default async function ReportPage({ params }: PageProps) {
               const cwRaces = cw.raceIds
                 .map((rid) => parsedRaces.find((r) => r.id === rid))
                 .filter(Boolean) as typeof parsedRaces
-              const dist = cwRaces[0]?.gpxPoints?.[cw.segmentIndex]?.dist
+              const dist = cw.dist
               return (
                 <div
                   key={i}

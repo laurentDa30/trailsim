@@ -118,12 +118,14 @@ async function runSimulation(config: SimConfig): Promise<void> {
       return { race, totalDist, totalElevGain, segmentCapacities, techMult, smoothSlope, nBins, binToSeg }
     })
 
-    // Determine global time range across all runs
-    // We need a single globalTimestamps array for the output
-    const maxStartOffset = Math.max(...races.map((r) => r.startOffset))
-    // Estimate max race time: slowest runner at ~3 km/h over longest race
-    const longestRace = Math.max(...raceMeta.map((m) => m.totalDist))
-    const estimatedMaxSeconds = maxStartOffset + (longestRace / 3) * 3600 + 3600
+    // Determine global time range across all runs.
+    // Per race: its own start offset + slowest finisher (~3 km/h) over its own
+    // distance — then take the worst. (Pairing offset with the matching race
+    // avoids over-sizing every buffer when a late wave is also the shortest.)
+    const estimatedMaxSeconds =
+      Math.max(
+        ...raceMeta.map((m) => m.race.startOffset + (m.totalDist / 3) * 3600)
+      ) + 3600
 
     // Build global timestamps
     const globalTimestamps: number[] = []

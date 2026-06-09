@@ -19,8 +19,22 @@ export function createRunnersFromProfiles(
   const runners: Runner[] = []
   let runnerIndex = 0
 
-  for (const profile of profiles) {
-    const count = Math.round(totalRunners * (profile.percentage / 100))
+  // Largest-remainder apportionment so the spawned count matches the configured
+  // total exactly (when percentages sum to 100). Plain per-profile rounding
+  // drifts — e.g. 150 runners on the default mix would yield 152.
+  const sumPct = profiles.reduce((s, p) => s + p.percentage, 0)
+  const target = sumPct > 0 ? Math.round(totalRunners * (sumPct / 100)) : 0
+  const exact = profiles.map((p) => (sumPct > 0 ? totalRunners * (p.percentage / 100) : 0))
+  const counts = exact.map((e) => Math.floor(e))
+  let remaining = target - counts.reduce((s, c) => s + c, 0)
+  const order = exact
+    .map((e, i) => ({ i, frac: e - Math.floor(e) }))
+    .sort((a, b) => b.frac - a.frac)
+  for (let k = 0; k < order.length && remaining > 0; k++, remaining--) counts[order[k].i]++
+
+  for (let pi = 0; pi < profiles.length; pi++) {
+    const profile = profiles[pi]
+    const count = counts[pi]
     for (let i = 0; i < count; i++) {
       const t = Math.random()
       const baseSpeed =

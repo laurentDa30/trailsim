@@ -45,6 +45,11 @@ const VB_W = 1000
 const VB_H = 680
 const PAD = 28
 
+/** A marker is "placed" only if it has real, non-default coordinates. */
+function isPlaced(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)
+}
+
 interface Projected {
   project: (lat: number, lng: number) => { x: number; y: number }
   ok: boolean
@@ -52,29 +57,27 @@ interface Projected {
 
 /** Equirectangular projection fitted (letter-boxed) into the viewBox. */
 function buildProjection(races: OpMapRace[], zones: OpMapZone[], logistics: PlacedLogi[]): Projected {
-  const lats: number[] = []
-  const lngs: number[] = []
+  // Collect coordinate PAIRS, then keep only valid ones. Filtering both axes
+  // together (and dropping the schema default (0,0), e.g. an unplaced segment)
+  // is essential: a single (0,0) point would otherwise stretch the bounding box
+  // to the Gulf of Guinea and squash the real trace to a dot.
+  const pairs: { lat: number; lng: number }[] = []
+  const add = (lat: number, lng: number) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    if (lat === 0 && lng === 0) return
+    pairs.push({ lat, lng })
+  }
   for (const r of races) {
-    for (const p of r.points) {
-      lats.push(p.lat)
-      lngs.push(p.lng)
-    }
-    for (const s of r.segments) {
-      lats.push(s.lat)
-      lngs.push(s.lng)
-    }
+    for (const p of r.points) add(p.lat, p.lng)
+    for (const s of r.segments) add(s.lat, s.lng)
   }
-  for (const z of zones) {
-    lats.push(z.lat)
-    lngs.push(z.lng)
-  }
-  for (const l of logistics) {
-    lats.push(l.lat)
-    lngs.push(l.lng)
-  }
-  const valid = lats.filter((v) => Number.isFinite(v) && v !== 0)
-  if (valid.length < 2) return { project: () => ({ x: VB_W / 2, y: VB_H / 2 }), ok: false }
+  for (const z of zones) add(z.lat, z.lng)
+  for (const l of logistics) add(l.lat, l.lng)
 
+  if (pairs.length < 2) return { project: () => ({ x: VB_W / 2, y: VB_H / 2 }), ok: false }
+
+  const lats = pairs.map((p) => p.lat)
+  const lngs = pairs.map((p) => p.lng)
   const latMin = Math.min(...lats)
   const latMax = Math.max(...lats)
   const lngMin = Math.min(...lngs)
@@ -209,6 +212,7 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
           {proj.ok &&
             races.flatMap((r) =>
               r.segments.map((s, i) => {
+                if (!isPlaced(s.lat, s.lng)) return null
                 const { x, y } = proj.project(s.lat, s.lng)
                 if (s.type === 'RAVITO') {
                   return (
@@ -235,6 +239,7 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
           {/* Risk zones (bouchons / affluence) */}
           {proj.ok &&
             zones.map((z, i) => {
+              if (!isPlaced(z.lat, z.lng)) return null
               const { x, y } = proj.project(z.lat, z.lng)
               const color = z.kind === 'bouchon' ? '#DC2626' : '#D97706'
               return (
@@ -248,6 +253,7 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
           {/* Placed logistics */}
           {proj.ok &&
             logistics.map((l) => {
+              if (!isPlaced(l.lat, l.lng)) return null
               const { x, y } = proj.project(l.lat, l.lng)
               const meta = logiTypeOf(l.type)
               const name = logiDisplayName(l)
