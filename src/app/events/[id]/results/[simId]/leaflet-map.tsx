@@ -17,6 +17,15 @@ import 'leaflet/dist/leaflet.css'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
 import { logiTypeOf, logiDisplayName, type PlacedLogi } from './logistics'
 
+/**
+ * Stop clicks inside a popup from reaching the map's click handler — otherwise,
+ * while a logistics type is selected (placement mode), clicking "Supprimer"
+ * both deletes the marker AND drops a new one at the click point.
+ */
+function stopMapClicks(el: HTMLDivElement | null) {
+  if (el) L.DomEvent.disableClickPropagation(el)
+}
+
 interface DrawItem {
   lat: number
   lng: number
@@ -609,7 +618,7 @@ export default function LeafletMap({
                 </div>
               </Tooltip>
               <Popup>
-                <div style={{ minWidth: 140 }}>
+                <div ref={stopMapClicks} style={{ minWidth: 140 }}>
                   <div style={{ fontWeight: 700, marginBottom: 4, color: meta.color }}>
                     {name}
                   </div>

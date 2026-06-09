@@ -9,6 +9,15 @@ import { presetOf } from './constraint-presets'
 import { logiTypeOf, type PlacedLogi } from '@/lib/logistics'
 import { slopeColor, SLOPE_STOPS } from '@/lib/slope'
 
+/**
+ * Stop clicks inside a popup from reaching the map's click handler — otherwise,
+ * while placing (a preset or a logistics type), clicking "Supprimer" both
+ * removes the marker AND drops a new one at the click point.
+ */
+function stopMapClicks(el: HTMLDivElement | null) {
+  if (el) L.DomEvent.disableClickPropagation(el)
+}
+
 /** Decimate then split a track into consecutive 2-point segments coloured by slope. */
 function slopeSegments(points: GPXPoint[], maxPts = 400) {
   if (points.length < 2) return [] as { positions: [number, number][]; color: string }[]
@@ -214,7 +223,7 @@ export default function ConstraintMap({
           return (
             <Marker key={c.id} position={[c.lat, c.lng]} icon={constraintIcon(preset.letter, preset.color)}>
               <Popup>
-                <div style={{ minWidth: 130 }}>
+                <div ref={stopMapClicks} style={{ minWidth: 130 }}>
                   <div style={{ fontWeight: 700, marginBottom: 4, color: preset.color }}>{preset.label}</div>
                   <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{preset.description}</div>
                   <button
@@ -244,7 +253,7 @@ export default function ConstraintMap({
           return (
             <Marker key={l.id} position={[l.lat, l.lng]} icon={logiIcon(meta.letter, meta.color)}>
               <Popup>
-                <div style={{ minWidth: 130 }}>
+                <div ref={stopMapClicks} style={{ minWidth: 130 }}>
                   <div style={{ fontWeight: 700, marginBottom: 6, color: meta.color }}>{meta.label}</div>
                   <button
                     onClick={() => onRemoveLogi?.(l.id)}
