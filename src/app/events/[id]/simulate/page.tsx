@@ -66,6 +66,7 @@ export default async function SimulatePage({ params }: PageProps) {
     affluenceThreshold: simulation.affluenceThreshold,
     nRuns: simulation.nRuns,
     peloton: simulation.peloton,
+    racesSnapshot: simulation.racesSnapshot,
     runnerProfiles: simulation.runnerProfiles,
   }
 

@@ -16,6 +16,7 @@ import {
   FileTextIcon,
   MapIcon,
 } from 'lucide-react'
+import { DeleteSimButton } from './delete-sim-button'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -208,6 +209,7 @@ export default async function SimulationsHistoryPage({ params }: PageProps) {
 
                   {/* Actions */}
                   <div className="flex items-center justify-end gap-2 mt-3 flex-wrap">
+                    <DeleteSimButton simId={sim.id} simName={sim.name} />
                     {isDone ? (
                       <>
                         <Link

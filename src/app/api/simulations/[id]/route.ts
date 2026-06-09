@@ -91,3 +91,37 @@ export async function PATCH(
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id } = await params
+
+    const simulation = await db.simulation.findUnique({
+      where: { id },
+      include: { event: { select: { userId: true } } },
+    })
+
+    if (!simulation) {
+      return Response.json({ error: "Simulation not found" }, { status: 404 })
+    }
+    if (simulation.event.userId !== session.user.id) {
+      return Response.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    // runnerProfiles cascade on delete (onDelete: Cascade in the schema).
+    await db.simulation.delete({ where: { id } })
+
+    return Response.json({ ok: true })
+  } catch (error) {
+    console.error("[DELETE /api/simulations/[id]]", error)
+    return Response.json({ error: "Internal server error" }, { status: 500 })
+  }
+}

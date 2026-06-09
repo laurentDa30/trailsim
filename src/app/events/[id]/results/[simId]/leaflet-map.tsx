@@ -170,8 +170,6 @@ interface LeafletMapProps {
   collisionWindows?: CollisionWindow[]
   runnersData?: RunnerData[]
   timeIndex?: number
-  /** Current playback time in seconds (since T0), for staging waiting waves. */
-  currentSec?: number
   showRunners?: boolean
   showZones?: boolean
   showShared?: boolean
@@ -266,7 +264,6 @@ export default function LeafletMap({
   collisionWindows = [],
   runnersData = [],
   timeIndex = 0,
-  currentSec,
   showRunners = true,
   showZones = true,
   showShared = true,
@@ -384,20 +381,37 @@ export default function LeafletMap({
     return out
   }, [showRunners, runnersData, timeIndex, visibleRaces, racesById])
 
-  // Runners of a wave that hasn't started yet: staged at their start line so
-  // a staggered départ is visible (they wait, then release at T+offset)
-  // instead of popping in from nowhere. A wave is "waiting" purely from the
-  // clock vs its start offset, so this needs no engine data and works on any
-  // existing result. A small phyllotaxis spread avoids one dot on top of all.
+  // Each race's actual départ, read from the trajectories themselves: the first
+  // frame index where any of its runners moves. Deriving it from the result
+  // (not from live race.startTime) keeps the staged wave perfectly in sync with
+  // the moving dots and with the run's snapshot — even if race.startTime is
+  // edited afterwards or a page fetch is stale.
+  const departIndexByRace = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const r of runnersData) {
+      let idx = -1
+      for (let t = 0; t < r.positions.length; t++) {
+        if ((r.positions[t] ?? 0) > 0) { idx = t; break }
+      }
+      if (idx < 0) continue // never moves (no data) — ignore
+      const cur = m.get(r.raceId)
+      if (cur == null || idx < cur) m.set(r.raceId, idx)
+    }
+    return m
+  }, [runnersData])
+
+  // Runners of a wave that hasn't started yet: staged at their start line so a
+  // staggered départ is visible (they wait, then release) instead of popping in
+  // from nowhere. A small phyllotaxis spread avoids one dot on top of all.
   const stagedDots = useMemo(() => {
-    if (!showRunners || currentSec == null) return [] as { lat: number; lng: number; color: string }[]
+    if (!showRunners) return [] as { lat: number; lng: number; color: string }[]
     const out: { lat: number; lng: number; color: string }[] = []
     for (const r of runnersData) {
       if (!visibleRaces.has(r.raceId)) continue
       const race = racesById.get(r.raceId)
       if (!race || race.gpxPoints.length < 1) continue
-      const startSec = race.startTime * 60
-      if (currentSec >= startSec) continue // already released
+      const departIdx = departIndexByRace.get(r.raceId)
+      if (departIdx == null || timeIndex >= departIdx) continue // already released
       const sp = race.gpxPoints[0]
       const i = out.length
       const ang = i * 2.399963 // golden angle
@@ -409,7 +423,7 @@ export default function LeafletMap({
       })
     }
     return out
-  }, [showRunners, currentSec, runnersData, visibleRaces, racesById])
+  }, [showRunners, timeIndex, runnersData, visibleRaces, racesById, departIndexByRace])
 
   // Combined draw list for the canvas overlay (bottom → top)
   const canvasItems = useMemo<DrawItem[]>(() => {

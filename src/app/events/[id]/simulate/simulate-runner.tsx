@@ -25,6 +25,7 @@ interface SimulateRunnerProps {
     affluenceThreshold?: number
     nRuns?: number
     peloton?: string | null
+    racesSnapshot?: string | null
     runnerProfiles: RunnerProfile[]
   }
   races: {
@@ -174,6 +175,18 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
           color: a.color,
         }))
 
+    // Départs frozen at this simulation's creation (race id → minutes).
+    const snapStartMin = new Map<string, number>()
+    try {
+      if (simulation.racesSnapshot) {
+        for (const s of JSON.parse(simulation.racesSnapshot) as { id: string; startTime: number }[]) {
+          snapStartMin.set(s.id, s.startTime)
+        }
+      }
+    } catch {
+      /* fall back to live race.startTime */
+    }
+
     const config: SimConfig = {
       simulationId: simulation.id,
       races: races.map((r) => {
@@ -194,7 +207,10 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
           name: r.name,
           color: r.color,
           // startTime is stored in minutes (T+30 min); the engine works in seconds.
-          startOffset: r.startTime * 60,
+          // Source the départ from THIS simulation's snapshot so the computed
+          // trajectories match the "Config utilisée" block exactly (immune to a
+          // stale page fetch or a later edit of race.startTime).
+          startOffset: (snapStartMin.get(r.id) ?? r.startTime) * 60,
           totalRunners: raceTotal,
           gpxPoints,
           profiles: raceProfiles,

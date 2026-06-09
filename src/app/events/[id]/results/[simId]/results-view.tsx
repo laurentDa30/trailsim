@@ -650,7 +650,6 @@ export function ResultsView({
               highlightedCollision={highlightedCollision}
               runnersData={runnersData}
               timeIndex={timeIndex}
-              currentSec={timestamps[timeIndex] ?? 0}
               showRunners={layers.runners}
               showZones={layers.zones}
               showShared={layers.shared}
