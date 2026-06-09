@@ -310,3 +310,207 @@ export function computeRecommendations(
   recs.sort((a, b) => PRIO_RANK[a.priority] - PRIO_RANK[b.priority])
   return recs.slice(0, 12)
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Organisation helpers — cut-offs, poste windows, finish flow.
+// All read the LAST-RUN trajectory (runnersData), i.e. a single representative
+// scenario (same basis as the timelapse / affluence), not an N-run average.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Clock time (s from T0) at which a runner first reaches fraction `p` of its race. */
+function crossingSec(positions: number[], ts: number[], p: number): number | null {
+  for (let t = 0; t < positions.length; t++) {
+    if ((positions[t] ?? 0) >= p) return ts[t] ?? null
+  }
+  return null
+}
+
+function quantile(sorted: number[], q: number): number | null {
+  if (sorted.length === 0) return null
+  const i = Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))
+  return sorted[i]
+}
+
+export interface PassageStats {
+  firstSec: number | null
+  p50Sec: number | null
+  p90Sec: number | null
+  p95Sec: number | null
+  lastSec: number | null
+  total: number // runners who reached this point
+  field: number // runners in the race
+}
+
+/**
+ * FEATURE 1 — cut-off helper. Times at which the field crosses a given km of a
+ * race (clock time from T0): 1st, median, 90 %, 95 %, last. An organiser reads
+ * "to drop ≤ 10 %, set the barrier at the 90 % time".
+ */
+export function computePassageStats(
+  result: CompressedSimulationResult,
+  race: RaceLite,
+  km: number
+): PassageStats {
+  const ts = result.globalTimestamps
+  const total = race.gpxPoints.length > 0 ? race.gpxPoints[race.gpxPoints.length - 1].dist : 0
+  const p = total > 0 ? Math.min(1, km / total) : 0
+  const rr = result.runnersData.filter((r) => r.raceId === race.id)
+  const times: number[] = []
+  for (const r of rr) {
+    const s = crossingSec(r.positions, ts, p)
+    if (s != null) times.push(s)
+  }
+  times.sort((a, b) => a - b)
+  return {
+    firstSec: times[0] ?? null,
+    p50Sec: quantile(times, 0.5),
+    p90Sec: quantile(times, 0.9),
+    p95Sec: quantile(times, 0.95),
+    lastSec: times[times.length - 1] ?? null,
+    total: times.length,
+    field: rr.length,
+  }
+}
+
+export interface PassageBin {
+  km: number
+  firstSec: number
+  lastSec: number
+  count: number
+}
+
+/**
+ * FEATURE 2 — per-km-bin passage window for a race (single pass). For each
+ * 150 m bin: first arrival and last departure (clock time) and how many runners
+ * passed. Used to give each logistics poste / ravito its "active from→to"
+ * staffing window.
+ */
+export function computePassageByKmBin(
+  result: CompressedSimulationResult,
+  race: RaceLite,
+  binKm = 0.15
+): PassageBin[] {
+  const ts = result.globalTimestamps
+  const total = race.gpxPoints.length > 0 ? race.gpxPoints[race.gpxPoints.length - 1].dist : 0
+  if (total <= 0) return []
+  const nBins = Math.max(1, Math.ceil(total / binKm))
+  const first = new Array<number>(nBins).fill(Infinity)
+  const last = new Array<number>(nBins).fill(-Infinity)
+  const count = new Array<number>(nBins).fill(0)
+  const rr = result.runnersData.filter((r) => r.raceId === race.id)
+  for (const r of rr) {
+    let prevBin = -1
+    for (let t = 0; t < r.positions.length; t++) {
+      const pos = r.positions[t] ?? 0
+      if (pos <= 0) continue
+      const km = pos * total
+      const bin = Math.min(nBins - 1, Math.floor(km / binKm))
+      const sec = ts[t]
+      if (sec == null) continue
+      if (sec < first[bin]) first[bin] = sec
+      if (sec > last[bin]) last[bin] = sec
+      if (bin !== prevBin) {
+        count[bin]++ // count a runner once per bin entered
+        prevBin = bin
+      }
+    }
+  }
+  const out: PassageBin[] = []
+  for (let b = 0; b < nBins; b++) {
+    if (count[b] > 0 && isFinite(first[b])) {
+      out.push({ km: (b + 0.5) * binKm, firstSec: first[b], lastSec: last[b], count: count[b] })
+    }
+  }
+  return out
+}
+
+/** Nearest passage bin to a given km (for mapping an arbitrary poste position). */
+export function passageAtKm(bins: PassageBin[], km: number): PassageBin | null {
+  let best: PassageBin | null = null
+  let bestD = Infinity
+  for (const b of bins) {
+    const d = Math.abs(b.km - km)
+    if (d < bestD) {
+      bestD = d
+      best = b
+    }
+  }
+  return best
+}
+
+export interface FinishFlowBin {
+  tStart: number
+  tEnd: number
+  count: number
+}
+export interface RaceFinishFlow {
+  raceId: string
+  name: string
+  color: string
+  total: number
+  firstSec: number | null
+  medianSec: number | null
+  lastSec: number | null
+  bins: number[] // counts aligned to the shared bin grid
+}
+
+/**
+ * FEATURE 5 — finish-line arrival flow. Histogram of finishers per time bin
+ * (default 10 min) per race + combined, on a shared grid, to size the finish
+ * area / chrono / final ravito and spot two races arriving together.
+ */
+export function computeFinishFlow(
+  result: CompressedSimulationResult,
+  races: RaceLite[],
+  binSec = 600
+): {
+  perRace: RaceFinishFlow[]
+  combined: number[]
+  grid: FinishFlowBin[]
+  binSec: number
+  peakCombined: number
+} {
+  const ts = result.globalTimestamps
+  // collect finish times per race
+  const finishByRace = new Map<string, number[]>()
+  let maxFinish = 0
+  for (const race of races) {
+    const rr = result.runnersData.filter((r) => r.raceId === race.id)
+    const finishes: number[] = []
+    for (const r of rr) {
+      const s = crossingSec(r.positions, ts, 1)
+      if (s != null) {
+        finishes.push(s)
+        if (s > maxFinish) maxFinish = s
+      }
+    }
+    finishes.sort((a, b) => a - b)
+    finishByRace.set(race.id, finishes)
+  }
+  const nBins = Math.max(1, Math.ceil((maxFinish + 1) / binSec))
+  const grid: FinishFlowBin[] = []
+  for (let b = 0; b < nBins; b++) grid.push({ tStart: b * binSec, tEnd: (b + 1) * binSec, count: 0 })
+  const combined = new Array<number>(nBins).fill(0)
+
+  const perRace: RaceFinishFlow[] = races.map((race) => {
+    const finishes = finishByRace.get(race.id) ?? []
+    const bins = new Array<number>(nBins).fill(0)
+    for (const s of finishes) {
+      const b = Math.min(nBins - 1, Math.floor(s / binSec))
+      bins[b]++
+      combined[b]++
+    }
+    return {
+      raceId: race.id,
+      name: race.name,
+      color: race.color,
+      total: finishes.length,
+      firstSec: finishes[0] ?? null,
+      medianSec: quantile(finishes, 0.5),
+      lastSec: finishes[finishes.length - 1] ?? null,
+      bins,
+    }
+  })
+
+  return { perRace, combined, grid, binSec, peakCombined: Math.max(1, ...combined) }
+}

@@ -6,6 +6,9 @@ import {
   clusterCollisionWindows,
   computePerRaceStats,
   computeRecommendations,
+  computePassageStats,
+  computePassageByKmBin,
+  computeFinishFlow,
   type RaceLite,
 } from '@/lib/report-metrics'
 import { OperationalMap, type OpMapRace, type OpMapZone } from './operational-map'
@@ -135,6 +138,30 @@ export default async function ReportPage({ params }: PageProps) {
       return { raceId: z.raceId, lat: pt.lat, lng: pt.lng, dist: z.dist, kind: z.kind }
     })
     .filter((z): z is OpMapZone => z != null)
+
+  // ── Organisation metrics (cut-offs, poste windows, finish flow) ──
+  // FEATURE 1 — cut-off table at each ravito + the finish, per race.
+  const cutoffRows = result
+    ? parsedRaces.flatMap((r) => {
+        const totalKm = r.gpxPoints.length > 0 ? r.gpxPoints[r.gpxPoints.length - 1].dist : 0
+        const ravitoKms = r.segments
+          .filter((s) => s.type === 'RAVITO')
+          .map((s) => r.gpxPoints[s.indexStart]?.dist ?? 0)
+          .filter((km) => km > 0 && km < totalKm)
+          .sort((a, b) => a - b)
+        const points = [
+          ...ravitoKms.map((km) => ({ label: `Ravito km ${km.toFixed(1)}`, km })),
+          { label: 'Arrivée', km: totalKm },
+        ]
+        const lite: RaceLite = { id: r.id, name: r.name, color: r.color, gpxPoints: r.gpxPoints }
+        return points.map((pt) => ({ race: r, label: pt.label, km: pt.km, stats: computePassageStats(result, lite, pt.km) }))
+      })
+    : []
+  // FEATURE 5 — finish-line arrival flow.
+  const finishFlow = result ? computeFinishFlow(result, racesLite, 600) : null
+  // FEATURE 2 — per-km passage windows for poste staffing (passed to the map).
+  const passageByRace: Record<string, ReturnType<typeof computePassageByKmBin>> = {}
+  if (result) for (const r of racesLite) passageByRace[r.id] = computePassageByKmBin(result, r)
 
   return (
     <div
@@ -471,15 +498,94 @@ export default async function ReportPage({ params }: PageProps) {
           )}
         </div>
 
+        {/* ── BARRIÈRES HORAIRES (FEATURE 1) ── */}
+        <div className="page-break" />
+        <SectionTitle>BARRIÈRES HORAIRES (INDICATIF)</SectionTitle>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.5 }}>
+          Heure (T+ depuis le départ T0) de passage du peloton à chaque ravito et à l&apos;arrivée.
+          Pour éliminer ≤ 10 %, fixez la barrière à l&apos;heure « 90 % ». Scénario de référence
+          (dernier run).
+        </p>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '28px', fontSize: '12px' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
+              {['Course', 'Point', '1er passage', '50 %', '90 %', 'Dernier', 'Passés'].map((h) => (
+                <th key={h} style={thStyle}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {cutoffRows.length === 0 ? (
+              <tr><td colSpan={7} style={{ padding: '16px 10px', color: '#9ca3af', textAlign: 'center' }}>Aucune donnée</td></tr>
+            ) : (
+              cutoffRows.map((row, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 ? '#fafafa' : '#fff' }}>
+                  <td style={{ padding: '8px 10px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.race.color, display: 'inline-block', flexShrink: 0 }} />
+                      {row.race.name}
+                    </span>
+                  </td>
+                  <td style={{ padding: '8px 10px', color: '#374151' }}>{row.label}</td>
+                  <td style={tdMono}>{row.stats.firstSec != null ? fmtClock(row.stats.firstSec) : '—'}</td>
+                  <td style={tdMono}>{row.stats.p50Sec != null ? fmtClock(row.stats.p50Sec) : '—'}</td>
+                  <td style={tdMono}>{row.stats.p90Sec != null ? fmtClock(row.stats.p90Sec) : '—'}</td>
+                  <td style={{ ...tdMono, color: '#D97706' }}>{row.stats.lastSec != null ? fmtClock(row.stats.lastSec) : '—'}</td>
+                  <td style={tdMono}>{row.stats.total}/{row.stats.field}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        {/* ── FLUX D'ARRIVÉE (FEATURE 5) ── */}
+        <SectionTitle>FLUX D&apos;ARRIVÉE</SectionTitle>
+        {!finishFlow || finishFlow.grid.length === 0 ? (
+          <p style={{ color: '#9ca3af', fontSize: 13, marginBottom: 28 }}>Aucune arrivée enregistrée.</p>
+        ) : (
+          <div className="avoid-break" style={{ marginBottom: '28px' }}>
+            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10, lineHeight: 1.5 }}>
+              Arrivants par tranche de {finishFlow.binSec / 60} min (empilé par course) — pour
+              dimensionner l&apos;arrivée, le chrono et le ravito final.
+            </p>
+            <FinishFlowChart flow={finishFlow} />
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12, fontSize: '12px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
+                  {['Course', 'Arrivants', '1ère', 'Médiane', 'Dernière'].map((h) => (
+                    <th key={h} style={thStyle}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {finishFlow.perRace.map((rf, i) => (
+                  <tr key={rf.raceId} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 ? '#fafafa' : '#fff' }}>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: rf.color, display: 'inline-block' }} />
+                        {rf.name}
+                      </span>
+                    </td>
+                    <td style={tdMono}>{rf.total}</td>
+                    <td style={tdMono}>{rf.firstSec != null ? fmtClock(rf.firstSec) : '—'}</td>
+                    <td style={tdMono}>{rf.medianSec != null ? fmtClock(rf.medianSec) : '—'}</td>
+                    <td style={tdMono}>{rf.lastSec != null ? fmtClock(rf.lastSec) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* ── CARTE D'IMPLANTATION ── */}
         <div className="page-break" />
         <SectionTitle>CARTE D&apos;IMPLANTATION</SectionTitle>
         <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.5 }}>
           Tracés, ravitaillements, passages étroits, zones à risque et postes logistiques — le plan
-          à déployer le jour J.
+          à déployer le jour J. Chaque poste indique son créneau d&apos;activité (1er → dernier coureur).
         </p>
         <div className="avoid-break">
-          <OperationalMap simId={simId} races={mapRaces} zones={mapZones} height={460} showInventory />
+          <OperationalMap simId={simId} races={mapRaces} zones={mapZones} passageByRace={passageByRace} height={460} showInventory />
         </div>
 
         {/* ── CONDITIONS & CONFIG ── */}
@@ -632,5 +738,49 @@ function PriorityBadge({ p }: { p: 'haute' | 'moyenne' | 'faible' }) {
     >
       {p}
     </span>
+  )
+}
+
+/** Stacked bar chart of finishers per time bin (server-rendered SVG). */
+function FinishFlowChart({ flow }: { flow: ReturnType<typeof computeFinishFlow> }) {
+  const W = 700
+  const H = 180
+  const padL = 4
+  const padR = 4
+  const chartTop = 10
+  const chartH = 130
+  const baseY = chartTop + chartH
+  const n = flow.grid.length
+  const barW = (W - padL - padR) / n
+  const peak = flow.peakCombined
+  const labelEvery = Math.max(1, Math.ceil(n / 8))
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
+      {/* baseline */}
+      <line x1={padL} y1={baseY} x2={W - padR} y2={baseY} stroke="#e5e7eb" strokeWidth="1" />
+      {/* peak label */}
+      <text x={padL} y={chartTop - 1} fontSize="10" fill="#9ca3af">pic {peak}/{flow.binSec / 60}min</text>
+      {flow.grid.map((g, b) => {
+        const x = padL + b * barW
+        let y = baseY
+        return (
+          <g key={b}>
+            {flow.perRace.map((rf) => {
+              const c = rf.bins[b] ?? 0
+              if (c <= 0) return null
+              const h = (c / peak) * chartH
+              y -= h
+              return <rect key={rf.raceId} x={x + 0.5} y={y} width={Math.max(0.5, barW - 1)} height={h} fill={rf.color} opacity={0.9} />
+            })}
+            {b % labelEvery === 0 && (
+              <text x={x + barW / 2} y={baseY + 12} fontSize="9" fill="#9ca3af" textAnchor="middle">
+                {`${Math.floor(g.tStart / 3600)}h${String(Math.floor((g.tStart % 3600) / 60)).padStart(2, '0')}`}
+              </text>
+            )}
+          </g>
+        )
+      })}
+    </svg>
   )
 }

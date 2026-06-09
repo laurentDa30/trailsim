@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import db from '@/lib/db'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
-import { clusterRiskZones, type RaceLite } from '@/lib/report-metrics'
+import { clusterRiskZones, computePassageByKmBin, type RaceLite, type PassageBin } from '@/lib/report-metrics'
 import type { OpMapRace, OpMapZone } from '../../report/[simId]/operational-map'
 import { TerrainView } from './terrain-view'
 
@@ -75,6 +75,9 @@ export default async function TerrainPage({ params }: PageProps) {
     })
     .filter((z): z is OpMapZone => z != null)
 
+  const passageByRace: Record<string, PassageBin[]> = {}
+  if (result) for (const r of racesLite) passageByRace[r.id] = computePassageByKmBin(result, r)
+
   return (
     <TerrainView
       eventId={id}
@@ -83,6 +86,7 @@ export default async function TerrainPage({ params }: PageProps) {
       simName={sim.name}
       races={mapRaces}
       zones={mapZones}
+      passageByRace={passageByRace}
     />
   )
 }

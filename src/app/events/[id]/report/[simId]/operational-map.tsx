@@ -2,6 +2,14 @@
 
 import { useMemo, useState } from 'react'
 import { LOGI_TYPES, logiStorageKey, logiTypeOf, logiDisplayName, type PlacedLogi } from '@/lib/logistics'
+import { passageAtKm, type PassageBin } from '@/lib/report-metrics'
+
+/** Clock time (T+ from T0) as Hh MM. */
+function fmtT(s: number): string {
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  return `${h}h${String(m).padStart(2, '0')}`
+}
 
 // ── Plain data shapes passed from the server (no Prisma / engine types) ──
 export interface OpMapPoint {
@@ -39,6 +47,8 @@ interface Props {
   height?: number
   /** Show the placed-logistics inventory table under the map. */
   showInventory?: boolean
+  /** Per-race passage windows (km bins) → each poste shows its active créneau. */
+  passageByRace?: Record<string, PassageBin[]>
 }
 
 const VB_W = 1000
@@ -122,7 +132,7 @@ function nearest(races: OpMapRace[], lat: number, lng: number): { race: OpMapRac
   return best
 }
 
-export function OperationalMap({ simId, races, zones, height = 460, showInventory = true }: Props) {
+export function OperationalMap({ simId, races, zones, height = 460, showInventory = true, passageByRace }: Props) {
   // Placed logistics live in the browser (localStorage), seeded at config time.
   const [logistics] = useState<PlacedLogi[]>(() => {
     if (typeof window === 'undefined') return []
@@ -374,7 +384,7 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
-                  {['Poste', 'Course la plus proche', 'Km', 'Coordonnées'].map((h) => (
+                  {['Poste', 'Course la plus proche', 'Km', 'Créneau actif', 'Coordonnées'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -398,6 +408,8 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
                   const name = logiDisplayName(l)
                   const hasCustom = !!l.label?.trim()
                   const near = nearest(races, l.lat, l.lng)
+                  const win =
+                    near && passageByRace ? passageAtKm(passageByRace[near.race.id] ?? [], near.dist) : null
                   return (
                     <tr key={l.id} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 ? '#fafafa' : '#fff' }}>
                       <td style={{ padding: '7px 10px' }}>
@@ -437,6 +449,9 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
                       </td>
                       <td style={{ padding: '7px 10px', color: '#374151', fontFamily: "'JetBrains Mono', monospace" }}>
                         {near ? near.dist.toFixed(1) : '—'}
+                      </td>
+                      <td style={{ padding: '7px 10px', color: '#374151', fontFamily: "'JetBrains Mono', monospace" }}>
+                        {win ? `${fmtT(win.firstSec)} → ${fmtT(win.lastSec)}` : '—'}
                       </td>
                       <td style={{ padding: '7px 10px', color: '#9ca3af', fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
                         {l.lat.toFixed(5)}, {l.lng.toFixed(5)}
