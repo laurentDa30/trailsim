@@ -6,12 +6,17 @@
  * speed bands and physical tuning.
  */
 
+// Default per-archetype proportions are calibrated on the real finisher data of
+// the reference event (results 10 km + 20 km, ~640 arrivants): blended average
+// of the two courses' speed-band distribution, rounded to 100 %.
+//   Élite 1 · Confirmé 9 · Intermédiaire 39 · Débutant 42 · Marcheur 9
+// Organisers can still adjust per race in step 2; saved configs keep their own.
 export const DEFAULT_ARCHETYPES = [
   {
     id: 'elite',
     label: 'Élite',
     color: '#7CB518',
-    percentage: 5,
+    percentage: 1,
     speedMin: 13,
     speedMax: 18,
     fatiguePlancher: 80,
@@ -23,7 +28,7 @@ export const DEFAULT_ARCHETYPES = [
     id: 'confirme',
     label: 'Confirmé',
     color: '#38BDF8',
-    percentage: 20,
+    percentage: 9,
     speedMin: 10,
     speedMax: 13,
     fatiguePlancher: 70,
@@ -35,7 +40,7 @@ export const DEFAULT_ARCHETYPES = [
     id: 'intermediaire',
     label: 'Intermédiaire',
     color: '#FBBF24',
-    percentage: 35,
+    percentage: 39,
     speedMin: 8,
     speedMax: 11,
     fatiguePlancher: 60,
@@ -47,7 +52,7 @@ export const DEFAULT_ARCHETYPES = [
     id: 'debutant',
     label: 'Débutant',
     color: '#F472B6',
-    percentage: 30,
+    percentage: 42,
     speedMin: 6,
     speedMax: 8,
     fatiguePlancher: 50,
@@ -59,7 +64,7 @@ export const DEFAULT_ARCHETYPES = [
     id: 'marcheur',
     label: 'Marcheur',
     color: '#A78BFA',
-    percentage: 10,
+    percentage: 9,
     speedMin: 4,
     speedMax: 6,
     fatiguePlancher: 40,
