@@ -138,13 +138,21 @@ export default async function ReportPage({ params }: PageProps) {
     name: r.name,
     color: r.color,
     points: downsample(r.gpxPoints).map((p) => ({ lat: p.lat, lng: p.lng, dist: p.dist })),
-    segments: r.segments.map((s) => ({
-      type: s.type,
-      label: s.label,
-      lat: s.lat,
-      lng: s.lng,
-      dist: r.gpxPoints[s.indexStart]?.dist ?? 0,
-    })),
+    segments: r.segments.map((s) => {
+      // Fall back to the GPX point at indexStart when the segment was placed
+      // without explicit coordinates (lat/lng default to 0). The engine already
+      // locates ravitos/constraints by indexStart, so this keeps the map/PDF in
+      // sync with the simulation instead of dropping uncoordinated markers.
+      const anchor = r.gpxPoints[s.indexStart]
+      const hasCoords = !(s.lat === 0 && s.lng === 0)
+      return {
+        type: s.type,
+        label: s.label,
+        lat: hasCoords ? s.lat : anchor?.lat ?? 0,
+        lng: hasCoords ? s.lng : anchor?.lng ?? 0,
+        dist: anchor?.dist ?? 0,
+      }
+    }),
   }))
   const mapZones: OpMapZone[] = clustered
     .map((z) => {
