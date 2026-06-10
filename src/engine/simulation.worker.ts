@@ -18,6 +18,7 @@ import { computeSpeed, computeFatigueFactor } from "./physics"
 import { computeWeather } from "./weather"
 import { computeDensityFactor, computeSegmentCapacity } from "./bottleneck"
 import { createRunnersFromProfiles } from "./runner-factory"
+import { rand, seedRng, newSeed } from "./rng"
 
 // ---------------------------------------------------------------------------
 // Worker message handler
@@ -169,8 +170,13 @@ async function runSimulation(config: SimConfig): Promise<void> {
     // ---------------------------------------------------------------------------
     // Monte-Carlo loop
     // ---------------------------------------------------------------------------
+    // Base seed: every draw below goes through the seeded RNG, so the whole
+    // Monte-Carlo replays identically from the same seed.
+    const baseSeed = config.seed ?? newSeed()
+
     for (let run = 0; run < nRuns; run++) {
       const isLastRun = run === nRuns - 1
+      seedRng(baseSeed + run)
 
       // Create fresh runners for each run
       const allRunners = races.flatMap(({ id: raceId, totalRunners, profiles }) =>
@@ -183,7 +189,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
         // Decide up-front whether this runner DNFs, and where (30–95% of race).
         // Harsh conditions raise the abandon probability.
         const abandonProb = Math.min(0.9, runner.abandonRate * weatherAbandonMult)
-        const willAbandon = Math.random() < abandonProb
+        const willAbandon = rand() < abandonProb
         stateMap.set(runner.id, {
           position: 0,
           distanceDone: 0,
@@ -192,7 +198,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
           energy: 1.0,
           finished: false,
           abandoned: false,
-          abandonAt: willAbandon ? 0.3 + Math.random() * 0.65 : Infinity,
+          abandonAt: willAbandon ? 0.3 + rand() * 0.65 : Infinity,
           atRavito: 0,
         })
       }
@@ -562,6 +568,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
 
     const result: CompressedSimulationResult = {
       simId: simulationId,
+      seed: baseSeed,
       globalTimestamps,
       runnersData,
       riskMap,

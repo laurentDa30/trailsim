@@ -1,3 +1,5 @@
+import { rand } from './rng'
+
 /**
  * Slope speed multiplier relative to flat running, based on Tobler's hiking
  * function: speed peaks at a gentle −5% downhill and falls off on both sides.
@@ -39,7 +41,7 @@ export function computeSpeed(
   terrainFactor: number
 ): number {
   const slopeMod = getMinettiSlopeFactor(slopePct)
-  const noise = 1 + (Math.random() - 0.5) * 0.06
+  const noise = 1 + (rand() - 0.5) * 0.06
   const raw =
     baseSpeed *
     slopeMod *

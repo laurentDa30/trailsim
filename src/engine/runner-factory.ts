@@ -1,4 +1,5 @@
 import type { Runner, RunnerProfile } from './types'
+import { rand } from './rng'
 
 /**
  * Generate a list of Runner instances from race profiles.
@@ -36,7 +37,7 @@ export function createRunnersFromProfiles(
     const profile = profiles[pi]
     const count = counts[pi]
     for (let i = 0; i < count; i++) {
-      const t = Math.random()
+      const t = rand()
       const baseSpeed =
         profile.baseSpeedMin + t * (profile.baseSpeedMax - profile.baseSpeedMin)
 

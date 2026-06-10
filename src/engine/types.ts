@@ -82,6 +82,10 @@ export interface SimConfig {
   nRuns: number
   jamThreshold?: number       // runners that make a bouchon (default 10)
   affluenceThreshold?: number // runners/150m that flag an affluence hotspot (default 15)
+  // Base seed of the Monte-Carlo (run i is seeded with seed+i). Omitted = drawn
+  // at random; either way the effective seed is echoed in the result so any run
+  // can be replayed exactly.
+  seed?: number
 }
 
 export interface RiskMapEntry {
@@ -95,6 +99,9 @@ export interface RiskMapEntry {
 
 export interface CompressedSimulationResult {
   simId: string
+  // Base seed actually used by the Monte-Carlo (absent on results computed
+  // before seeding existed).
+  seed?: number
   globalTimestamps: number[]
   runnersData: Array<{
     runnerId: string
