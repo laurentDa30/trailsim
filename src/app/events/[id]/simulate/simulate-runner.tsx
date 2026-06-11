@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useSimulation } from '@/hooks/use-simulation'
+import { RunnerLoader } from './runner-loader'
 import { refreshArchetypeTuning, type PelotonConfigs } from '@/lib/archetypes'
 import type { RunnerProfile, SimConfig, GPXPoint } from '@/engine/types'
 
@@ -92,7 +93,11 @@ function buildLogLines(s: LogSource): string[] {
 export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps) {
   const { state, run } = useSimulation()
   const logEndRef = useRef<HTMLDivElement>(null)
-  const [resultSaved, setResultSaved] = useState(false)
+  // Result persistence state. The "Voir les résultats" button waits for
+  // 'saved': navigating while the (large) snapshot PATCH is still in flight
+  // made the results page see status=PENDING, bounce back here, and re-run
+  // the whole simulation.
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   // A simulation already computed in a previous session must NOT recompute just
   // because the user clicked "Simulation" in the nav — only a fresh (PENDING)
   // run auto-starts. `started` flips when a run is launched this session.
@@ -287,19 +292,28 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save result when done
-  useEffect(() => {
-    if (state.status === 'done' && state.result && !resultSaved) {
-      setResultSaved(true)
-      fetch(`/api/simulations/${simulation.id}/result`, {
+  // Save result when done — the UI tracks completion so the user can't
+  // navigate to the results page before status=DONE is committed in DB.
+  async function saveResult() {
+    if (!state.result) return
+    setSaveState('saving')
+    try {
+      const res = await fetch(`/api/simulations/${simulation.id}/result`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resultSnapshot: state.result,
         }),
-      }).catch(() => {
-        // silently ignore
       })
+      setSaveState(res.ok ? 'saved' : 'error')
+    } catch {
+      setSaveState('error')
+    }
+  }
+
+  useEffect(() => {
+    if (state.status === 'done' && state.result && saveState === 'idle') {
+      saveResult()
     }
   }, [state.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -566,7 +580,10 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
                     background: 'var(--color-bg-2)',
                   }}
                 >
-                  {/* Fake mini-map grid */}
+                  {isRunning ? (
+                    /* Fun loader: runner sprinting in place while the trail scrolls */
+                    <RunnerLoader />
+                  ) : (
                   <svg
                     width="100%"
                     height="100%"
@@ -599,6 +616,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
                       opacity="0.6"
                     />
                   </svg>
+                  )}
 
                   {/* Race dots */}
                   <div className="absolute bottom-3 left-3 flex flex-col gap-1.5">
@@ -723,12 +741,27 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
                 Annuler
               </Button>
             )}
-            {isDone && (
+            {isDone && saveState === 'saved' && (
               <Button variant="primary" asChild>
                 <Link href={`/events/${event.id}/results/${simulation.id}`}>
                   Voir les résultats →
                 </Link>
               </Button>
+            )}
+            {isDone && (saveState === 'saving' || saveState === 'idle') && (
+              <Button variant="primary" disabled>
+                Enregistrement du résultat…
+              </Button>
+            )}
+            {isDone && saveState === 'error' && (
+              <div className="flex flex-col items-center gap-1.5">
+                <Button variant="primary" onClick={saveResult}>
+                  Réessayer l&apos;enregistrement
+                </Button>
+                <span className="text-xs" style={{ color: 'var(--color-danger, #DC2626)' }}>
+                  Le résultat n&apos;a pas pu être enregistré — il sera perdu si vous quittez la page.
+                </span>
+              </div>
             )}
           </div>
         </div>
