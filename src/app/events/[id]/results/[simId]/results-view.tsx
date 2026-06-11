@@ -10,6 +10,7 @@ import {
   LOGI_TYPES,
   logiStorageKey,
   logiTypeOf,
+  logiNumberedNames,
   type PlacedLogi,
 } from './logistics'
 import {
@@ -64,6 +65,14 @@ export interface ResultsViewProps {
     elevGain: number
     startTime: number
     gpxPoints: GPXPoint[]
+    segments?: {
+      type: string
+      lat: number
+      lng: number
+      indexStart: number
+      label?: string | null
+      ravitoSec?: number | null
+    }[]
   }[]
   runnerProfiles: {
     id: string
@@ -352,6 +361,10 @@ export function ResultsView({
     return counts
   }, [placedLogistics])
 
+  // "Signaleur 1", "Signaleur 2"… so each marker is identifiable on the map
+  // and in the staffing list below.
+  const logiNames = useMemo(() => logiNumberedNames(placedLogistics), [placedLogistics])
+
   useEffect(() => {
     if (!playing) {
       if (playRef.current) clearInterval(playRef.current)
@@ -534,6 +547,8 @@ export function ResultsView({
               onPlace={placeLogi}
               onMoveLogi={moveLogi}
               onRemoveLogi={removeLogi}
+              onRenameLogi={updateLogiLabel}
+              logiNames={logiNames}
             />
 
             {/* Course legend — colour = course, with live on-course count */}
@@ -1202,7 +1217,7 @@ export function ResultsView({
                         <input
                           type="text"
                           value={l.label ?? ''}
-                          placeholder={meta.label}
+                          placeholder={logiNames.get(l.id) ?? meta.label}
                           onChange={(e) => updateLogiLabel(l.id, e.target.value)}
                           className="flex-1 min-w-0 bg-transparent text-xs px-1 py-0.5 rounded border border-transparent focus:outline-none focus:border-[var(--color-line)] focus:bg-[var(--color-bg-2)] transition-colors"
                           style={{ color: 'var(--color-ink-2)' }}

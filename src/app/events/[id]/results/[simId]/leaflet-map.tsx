@@ -161,6 +161,15 @@ interface LeafletMapProps {
     color: string
     startTime: number
     gpxPoints: GPXPoint[]
+    /** Course segments (RAVITO drawn as map markers). */
+    segments?: {
+      type: string
+      lat: number
+      lng: number
+      indexStart: number
+      label?: string | null
+      ravitoSec?: number | null
+    }[]
   }[]
   riskMap: RiskMapEntry[]
   visibleRaces: Set<string>
@@ -183,6 +192,21 @@ interface LeafletMapProps {
   onPlace?: (lat: number, lng: number) => void
   onMoveLogi?: (id: string, lat: number, lng: number) => void
   onRemoveLogi?: (id: string) => void
+  /** Edit a placed item's designation straight from its popup. */
+  onRenameLogi?: (id: string, label: string) => void
+  /** Numbered display names ("Signaleur 2") keyed by placed-item id. */
+  logiNames?: Map<string, string>
+}
+
+/** Square cyan "R" icon for ravito points placed on the course. */
+function ravitoDivIcon(): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:20px;height:20px;border-radius:5px;background:#22D3EE;border:2px solid #14110f;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#0e3a44;font-size:10px;font-weight:700;font-family:Inter,sans-serif">R</div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -11],
+  })
 }
 
 /** Builds a coloured, lettered divIcon for a logistics marker. */
@@ -277,6 +301,8 @@ export default function LeafletMap({
   onPlace,
   onMoveLogi,
   onRemoveLogi,
+  onRenameLogi,
+  logiNames,
 }: LeafletMapProps) {
   // Compute center from first race with points
   const firstPoints = races.find((r) => r.gpxPoints.length > 0)?.gpxPoints
@@ -606,10 +632,40 @@ export default function LeafletMap({
           />
         )}
 
+        {/* Ravito points placed on the courses (from the event config) */}
+        {races.flatMap((race) => {
+          if (!visibleRaces.has(race.id)) return []
+          return (race.segments ?? [])
+            .filter((s) => s.type === 'RAVITO')
+            .map((s, i) => {
+              // Fall back to the trace point at indexStart when the segment was
+              // placed without coordinates — same convention as the report map.
+              const anchor = race.gpxPoints[s.indexStart]
+              const lat = s.lat === 0 && s.lng === 0 ? anchor?.lat : s.lat
+              const lng = s.lat === 0 && s.lng === 0 ? anchor?.lng : s.lng
+              if (lat == null || lng == null || (lat === 0 && lng === 0)) return null
+              const km = anchor?.dist
+              return (
+                <Marker key={`rav-${race.id}-${i}`} position={[lat, lng]} icon={ravitoDivIcon()}>
+                  <Tooltip direction="top" offset={[0, -10]}>
+                    <div style={{ fontWeight: 700, color: '#0891B2' }}>
+                      {s.label?.trim() || 'Ravitaillement'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#666' }}>
+                      {race.name}
+                      {km != null ? ` · km ${km.toFixed(1)}` : ''}
+                      {s.ravitoSec != null ? ` · pause ${Math.round(s.ravitoSec / 60)} min` : ''}
+                    </div>
+                  </Tooltip>
+                </Marker>
+              )
+            })
+        })}
+
         {/* Placed logistics markers (draggable) */}
         {showLogistics && placedLogistics.map((logi) => {
           const meta = logiTypeOf(logi.type)
-          const name = logiDisplayName(logi)
+          const name = logiNames?.get(logi.id) ?? logiDisplayName(logi)
           return (
             <Marker
               key={logi.id}
@@ -632,12 +688,34 @@ export default function LeafletMap({
                 </div>
               </Tooltip>
               <Popup>
-                <div ref={stopMapClicks} style={{ minWidth: 140 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 4, color: meta.color }}>
-                    {name}
-                  </div>
-                  {logi.label?.trim() && (
-                    <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{meta.label}</div>
+                <div ref={stopMapClicks} style={{ minWidth: 160 }}>
+                  {onRenameLogi ? (
+                    <label style={{ display: 'block', marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: '#888' }}>{meta.label} — désignation</span>
+                      <input
+                        type="text"
+                        defaultValue={logi.label ?? ''}
+                        placeholder={name}
+                        onBlur={(e) => onRenameLogi(logi.id, e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
+                        }}
+                        style={{
+                          width: '100%',
+                          marginTop: 2,
+                          padding: '3px 6px',
+                          borderRadius: 6,
+                          border: '1px solid #ccc',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: meta.color,
+                        }}
+                      />
+                    </label>
+                  ) : (
+                    <div style={{ fontWeight: 700, marginBottom: 4, color: meta.color }}>
+                      {name}
+                    </div>
                   )}
                   <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
                     {logi.lat.toFixed(5)}, {logi.lng.toFixed(5)}

@@ -32,7 +32,7 @@ export default async function ResultsPage({ params }: PageProps) {
     redirect(`/events/${id}/simulate`)
   }
 
-  const races = await db.race.findMany({ where: { eventId: id } })
+  const races = await db.race.findMany({ where: { eventId: id }, include: { segments: true } })
 
   // Parse resultSnapshot
   let result: CompressedSimulationResult | null = null
@@ -60,6 +60,14 @@ export default async function ResultsPage({ params }: PageProps) {
       elevGain: race.elevGain,
       startTime: race.startTime,
       gpxPoints,
+      segments: race.segments.map((s) => ({
+        type: s.type,
+        lat: s.lat,
+        lng: s.lng,
+        indexStart: s.indexStart,
+        label: s.label,
+        ravitoSec: s.ravitoSec,
+      })),
     }
   })
 

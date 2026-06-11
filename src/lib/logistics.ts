@@ -32,6 +32,26 @@ export function logiDisplayName(l: PlacedLogi): string {
   return custom && custom.length > 0 ? custom : logiTypeOf(l.type).label
 }
 
+/**
+ * Numbered display names for a whole set: unnamed items get "Signaleur 1",
+ * "Signaleur 2"… in placement order, so each marker is identifiable on the map
+ * and in the staffing list. Custom labels win and still consume their number
+ * (numbering stays stable when someone gets renamed).
+ */
+export function logiNumberedNames(list: PlacedLogi[]): Map<string, string> {
+  const counters: Record<string, number> = {}
+  const out = new Map<string, string>()
+  for (const l of list) {
+    counters[l.type] = (counters[l.type] ?? 0) + 1
+    const custom = l.label?.trim()
+    out.set(
+      l.id,
+      custom && custom.length > 0 ? custom : `${logiTypeOf(l.type).label} ${counters[l.type]}`
+    )
+  }
+  return out
+}
+
 export function logiStorageKey(simId: string): string {
   return `ts_logi_placed:${simId}`
 }
