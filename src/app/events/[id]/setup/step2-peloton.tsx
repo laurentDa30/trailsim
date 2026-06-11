@@ -167,6 +167,18 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
     })
   }
 
+  // Restore the default archetype set (distribution + physical params from the
+  // current calibration) for one race. The effectif (totalRunners) is kept.
+  function resetArchetypes(raceId: string) {
+    setConfigs((prev) => ({
+      ...prev,
+      [raceId]: {
+        ...(prev[raceId] ?? defaultConfig()),
+        archetypes: DEFAULT_ARCHETYPES.map((a) => ({ ...a })),
+      },
+    }))
+  }
+
   function normalizeArchetypes(raceId: string) {
     const cfg = configs[raceId] ?? defaultConfig()
     const total = cfg.archetypes.reduce((s, a) => s + a.percentage, 0)
@@ -286,6 +298,13 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
                           ? 'Total: 100%'
                           : `Total: ${total}% — ajustez (${diff > 0 ? '+' : ''}${diff}%)`}
                       </span>
+                      <button
+                        onClick={() => resetArchetypes(activeRace.id)}
+                        title="Restaurer la répartition et les paramètres physiques par défaut"
+                        className="text-xs text-[var(--color-ink-3)] hover:underline"
+                      >
+                        Valeurs par défaut
+                      </button>
                       <button
                         onClick={() => normalizeArchetypes(activeRace.id)}
                         className="text-xs text-[var(--color-lime)] hover:underline"
