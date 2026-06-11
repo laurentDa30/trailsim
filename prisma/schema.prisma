@@ -103,6 +103,8 @@ model EventMember {
   // INVITE (created, link not claimed) | ACTIF (claimed by a user account)
   status      String   @default("INVITE")
   inviteToken String   @unique @default(cuid())
+  // Courses this person is assigned to (JSON array of race ids; [] = none yet).
+  raceIds     String   @default("[]")
   note        String?
   createdAt   DateTime @default(now())
 

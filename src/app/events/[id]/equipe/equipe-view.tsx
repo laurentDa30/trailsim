@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import {
   UsersIcon,
@@ -10,7 +10,72 @@ import {
   LinkIcon,
   CheckIcon,
   RotateCcwIcon,
+  NetworkIcon,
 } from 'lucide-react'
+
+/** One indented tree branch: a coloured node line + its children. */
+function TreeBranch({
+  label,
+  color,
+  count,
+  children,
+}: {
+  label: string
+  color: string
+  count?: number
+  children: React.ReactNode
+}) {
+  return (
+    <div className="ml-2 pl-3" style={{ borderLeft: '1px solid var(--color-line)' }}>
+      <div className="flex items-center gap-2 py-1">
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+        <span className="font-medium" style={{ color: 'var(--color-ink-2)' }}>
+          {label}
+        </span>
+        {count != null && (
+          <span className="text-[10px]" style={{ color: 'var(--color-ink-4)' }}>
+            {count} pers.
+          </span>
+        )}
+      </div>
+      <div className="ml-1 pl-3 flex flex-col" style={{ borderLeft: '1px solid var(--color-line)' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function TreeLeaf({
+  name,
+  detail,
+  strong,
+  muted,
+}: {
+  name: string
+  detail?: string
+  strong?: boolean
+  muted?: boolean
+}) {
+  return (
+    <div className="flex items-baseline gap-2 py-0.5">
+      <span
+        className="truncate"
+        style={{
+          color: muted ? 'var(--color-ink-4)' : 'var(--color-ink)',
+          fontWeight: strong ? 600 : 400,
+          fontStyle: muted ? 'italic' : 'normal',
+        }}
+      >
+        {name}
+      </span>
+      {detail && (
+        <span className="text-[10px] shrink-0" style={{ color: 'var(--color-ink-4)' }}>
+          {detail}
+        </span>
+      )}
+    </div>
+  )
+}
 
 interface Member {
   id: string
@@ -20,7 +85,15 @@ interface Member {
   role: string
   status: string
   inviteToken: string
+  raceIds: string[]
   note: string | null
+}
+
+interface RaceRef {
+  id: string
+  name: string
+  color: string
+  distance: number
 }
 
 interface PartnerRow {
@@ -35,6 +108,8 @@ interface PartnerRow {
 
 interface EquipeViewProps {
   event: { id: string; name: string; location: string | null; date: string | null }
+  owner: { name: string | null; email: string }
+  races: RaceRef[]
   initialMembers: Member[]
   initialPartners: PartnerRow[]
   canEdit: boolean
@@ -89,7 +164,7 @@ function SectionCard({
   )
 }
 
-export function EquipeView({ event, initialMembers, initialPartners, canEdit }: EquipeViewProps) {
+export function EquipeView({ event, owner, races, initialMembers, initialPartners, canEdit }: EquipeViewProps) {
   const [members, setMembers] = useState<Member[]>(initialMembers)
   const [partners, setPartners] = useState<PartnerRow[]>(initialPartners)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -99,7 +174,19 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
   const [mEmail, setMEmail] = useState('')
   const [mPhone, setMPhone] = useState('')
   const [mRole, setMRole] = useState('BENEVOLE')
+  const [mRaces, setMRaces] = useState<Set<string>>(new Set())
   const [mBusy, setMBusy] = useState(false)
+
+  // Headcount per course (how the team is spread over the traces)
+  const raceCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const m of members) {
+      for (const rid of m.raceIds) counts.set(rid, (counts.get(rid) ?? 0) + 1)
+    }
+    return counts
+  }, [members])
+
+  const unassigned = useMemo(() => members.filter((m) => m.raceIds.length === 0), [members])
 
   // ── Partner form ──
   const [pName, setPName] = useState('')
@@ -121,18 +208,32 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
           email: mEmail.trim() || null,
           phone: mPhone.trim() || null,
           role: mRole,
+          raceIds: [...mRaces],
         }),
       })
       if (res.ok) {
-        const m = (await res.json()) as Member
-        setMembers((prev) => [...prev, m])
+        const raw = (await res.json()) as Omit<Member, 'raceIds'> & { raceIds: string }
+        setMembers((prev) => [...prev, { ...raw, raceIds: JSON.parse(raw.raceIds || '[]') }])
         setMName('')
         setMEmail('')
         setMPhone('')
+        setMRaces(new Set())
       }
     } finally {
       setMBusy(false)
     }
+  }
+
+  async function toggleMemberRace(m: Member, raceId: string) {
+    const next = m.raceIds.includes(raceId)
+      ? m.raceIds.filter((r) => r !== raceId)
+      : [...m.raceIds, raceId]
+    setMembers((prev) => prev.map((x) => (x.id === m.id ? { ...x, raceIds: next } : x)))
+    await fetch(`/api/events/${event.id}/members/${m.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raceIds: next }),
+    }).catch(() => {})
   }
 
   async function setMemberRole(id: string, role: string) {
@@ -235,6 +336,40 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
           title="Équipe"
           sub={`${members.length} membre${members.length > 1 ? 's' : ''} — chaque membre a un lien d’accès personnel à partager (WhatsApp, SMS) : aucun compte requis pour les bénévoles`}
         >
+          {/* Headcount spread over the traces */}
+          {races.length > 0 && members.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wider mr-1" style={{ color: 'var(--color-ink-4)' }}>
+                Répartition
+              </span>
+              {races.map((r) => (
+                <span
+                  key={r.id}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px]"
+                  style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ background: r.color }} />
+                  {r.name}
+                  <strong style={{ color: (raceCounts.get(r.id) ?? 0) > 0 ? 'var(--color-lime)' : 'var(--color-ink-4)' }}>
+                    {raceCounts.get(r.id) ?? 0}
+                  </strong>
+                </span>
+              ))}
+              {unassigned.length > 0 && (
+                <span
+                  className="px-2 py-0.5 rounded-full text-[11px]"
+                  style={{
+                    color: 'var(--color-warning)',
+                    background: 'color-mix(in oklab, var(--color-warning) 10%, transparent)',
+                    border: '1px solid color-mix(in oklab, var(--color-warning) 30%, transparent)',
+                  }}
+                >
+                  {unassigned.length} non affecté{unassigned.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+
           {canEdit && (
             <form onSubmit={addMember} className="flex flex-wrap gap-2 mb-3">
               <input
@@ -269,6 +404,41 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
                 <option value="BENEVOLE">Bénévole</option>
                 <option value="ORGANISATEUR">Organisateur</option>
               </select>
+              {races.length > 0 && (
+                <div className="w-full flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10.5px]" style={{ color: 'var(--color-ink-4)' }}>
+                    Positionné sur :
+                  </span>
+                  {races.map((r) => {
+                    const active = mRaces.has(r.id)
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() =>
+                          setMRaces((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(r.id)) next.delete(r.id)
+                            else next.add(r.id)
+                            return next
+                          })
+                        }
+                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] transition-colors"
+                        style={{
+                          background: active
+                            ? `color-mix(in oklab, ${r.color} 18%, transparent)`
+                            : 'var(--color-bg-2)',
+                          border: `1px solid ${active ? r.color : 'var(--color-line)'}`,
+                          color: active ? 'var(--color-ink)' : 'var(--color-ink-3)',
+                        }}
+                      >
+                        <span className="w-2 h-2 rounded-full" style={{ background: r.color }} />
+                        {r.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={mBusy}
@@ -325,6 +495,36 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
                     <div className="text-[10.5px] truncate" style={{ color: 'var(--color-ink-4)' }}>
                       {[m.email, m.phone].filter(Boolean).join(' · ') || '—'}
                     </div>
+                    {races.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {races.map((r) => {
+                          const active = m.raceIds.includes(r.id)
+                          if (!canEdit && !active) return null
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              disabled={!canEdit}
+                              onClick={() => toggleMemberRace(m, r.id)}
+                              title={canEdit ? (active ? `Retirer de ${r.name}` : `Affecter à ${r.name}`) : r.name}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] transition-colors"
+                              style={{
+                                background: active
+                                  ? `color-mix(in oklab, ${r.color} 18%, transparent)`
+                                  : 'var(--color-bg-1)',
+                                border: `1px solid ${active ? r.color : 'var(--color-line)'}`,
+                                color: active ? 'var(--color-ink)' : 'var(--color-ink-4)',
+                                opacity: active ? 1 : 0.7,
+                                cursor: canEdit ? 'pointer' : 'default',
+                              }}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ background: r.color }} />
+                              {r.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {canEdit ? (
@@ -385,6 +585,74 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
             </div>
           )}
         </SectionCard>
+
+        {/* Geographic tree: who is where, who reports to whom */}
+        {(members.length > 0 || races.length > 0) && (
+          <SectionCard
+            icon={<NetworkIcon size={15} />}
+            title="Arbre géographique"
+            sub="qui est où, qui dépend de qui"
+          >
+            <div className="flex flex-col text-xs">
+              {/* Root: the event + the organisation */}
+              <div className="flex items-center gap-2 py-1" style={{ color: 'var(--color-ink)' }}>
+                <span className="font-semibold">{event.name}</span>
+              </div>
+
+              {/* Organisation branch */}
+              <TreeBranch label="Organisation" color="var(--color-lime)">
+                <TreeLeaf
+                  name={owner.name || owner.email}
+                  detail="Propriétaire"
+                  strong
+                />
+                {members
+                  .filter((m) => m.role === 'ORGANISATEUR')
+                  .map((m) => (
+                    <TreeLeaf
+                      key={m.id}
+                      name={m.name}
+                      detail={`Organisateur${m.status === 'ACTIF' ? '' : ' · invité'}`}
+                    />
+                  ))}
+              </TreeBranch>
+
+              {/* One branch per course: its assigned team, under the organisation */}
+              {races.map((r) => {
+                const assigned = members.filter((m) => m.raceIds.includes(r.id))
+                return (
+                  <TreeBranch
+                    key={r.id}
+                    label={`${r.name}${r.distance > 0 ? ` (${r.distance} km)` : ''}`}
+                    color={r.color}
+                    count={assigned.length}
+                  >
+                    {assigned.length === 0 ? (
+                      <TreeLeaf name="Personne sur ce tracé" muted />
+                    ) : (
+                      assigned.map((m) => (
+                        <TreeLeaf
+                          key={m.id}
+                          name={m.name}
+                          detail={`${ROLE_LABELS[m.role] ?? m.role}${m.phone ? ` · ${m.phone}` : ''}`}
+                        />
+                      ))
+                    )}
+                  </TreeBranch>
+                )
+              })}
+
+              {/* Unassigned people */}
+              {unassigned.length > 0 && (
+                <TreeBranch label="Non affectés" color="var(--color-warning)" count={unassigned.length}>
+                  {unassigned.map((m) => (
+                    <TreeLeaf key={m.id} name={m.name} detail={ROLE_LABELS[m.role] ?? m.role} />
+                  ))}
+                </TreeBranch>
+              )}
+            </div>
+          </SectionCard>
+        )}
 
         <SectionCard
           icon={<HandshakeIcon size={15} />}

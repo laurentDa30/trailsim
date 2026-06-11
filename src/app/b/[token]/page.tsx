@@ -113,6 +113,14 @@ export default async function VolunteerPage({ params }: PageProps) {
   const hasMap = mapRaces.some((r) => r.points.length > 1)
   const isOrganisateur = member.role === 'ORGANISATEUR'
 
+  // Courses this volunteer is assigned to (shown as "votre secteur")
+  let assignedRaceIds: string[] = []
+  try {
+    assignedRaceIds = JSON.parse(member.raceIds) as string[]
+  } catch {
+    assignedRaceIds = []
+  }
+
   return (
     <main className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       <div className="max-w-3xl mx-auto p-4 flex flex-col gap-4">
@@ -182,6 +190,18 @@ export default async function VolunteerPage({ params }: PageProps) {
                   <span className="font-medium" style={{ color: 'var(--color-ink)' }}>
                     {r.name}
                   </span>
+                  {assignedRaceIds.includes(r.id) && (
+                    <span
+                      className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0"
+                      style={{
+                        color: 'var(--color-lime)',
+                        background: 'color-mix(in oklab, var(--color-lime) 15%, transparent)',
+                        border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
+                      }}
+                    >
+                      votre secteur
+                    </span>
+                  )}
                   <span style={{ color: 'var(--color-ink-4)' }}>
                     {r.distance > 0 ? `${r.distance} km` : ''}
                     {r.elevGain > 0 ? ` · ${r.elevGain} m D+` : ''}

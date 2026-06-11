@@ -8,6 +8,7 @@ const MemberCreateSchema = z.object({
   email: z.string().email().nullable().optional(),
   phone: z.string().max(30).nullable().optional(),
   role: z.enum(["ORGANISATEUR", "BENEVOLE"]).default("BENEVOLE"),
+  raceIds: z.array(z.string()).max(50).optional(),
   note: z.string().max(500).nullable().optional(),
 })
 
@@ -56,6 +57,7 @@ export async function POST(
         email: parsed.data.email ?? null,
         phone: parsed.data.phone ?? null,
         role: parsed.data.role,
+        raceIds: JSON.stringify(parsed.data.raceIds ?? []),
         note: parsed.data.note ?? null,
       },
     })

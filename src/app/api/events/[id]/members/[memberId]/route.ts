@@ -8,6 +8,7 @@ const MemberPatchSchema = z.object({
   email: z.string().email().nullable().optional(),
   phone: z.string().max(30).nullable().optional(),
   role: z.enum(["ORGANISATEUR", "BENEVOLE"]).optional(),
+  raceIds: z.array(z.string()).max(50).optional(),
   note: z.string().max(500).nullable().optional(),
   // Revoke the current access link and issue a new one (if the old link leaked).
   regenerateToken: z.boolean().optional(),
@@ -40,11 +41,12 @@ export async function PATCH(
     if (!parsed.success) {
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
-    const { regenerateToken, ...rest } = parsed.data
+    const { regenerateToken, raceIds, ...rest } = parsed.data
     const updated = await db.eventMember.update({
       where: { id: memberId },
       data: {
         ...rest,
+        ...(raceIds !== undefined ? { raceIds: JSON.stringify(raceIds) } : {}),
         ...(regenerateToken ? { inviteToken: crypto.randomUUID() } : {}),
       },
     })

@@ -18,7 +18,14 @@ export default async function EquipePage({ params }: PageProps) {
 
   const event = await db.event.findUnique({
     where: { id },
-    select: { id: true, name: true, location: true, date: true },
+    select: {
+      id: true,
+      name: true,
+      location: true,
+      date: true,
+      user: { select: { name: true, email: true } },
+      races: { select: { id: true, name: true, color: true, distance: true }, orderBy: { startTime: 'asc' } },
+    },
   })
   if (!event) notFound()
 
@@ -41,16 +48,27 @@ export default async function EquipePage({ params }: PageProps) {
         location: event.location,
         date: event.date ? event.date.toISOString() : null,
       }}
-      initialMembers={members.map((m) => ({
-        id: m.id,
-        name: m.name,
-        email: m.email,
-        phone: m.phone,
-        role: m.role,
-        status: m.status,
-        inviteToken: m.inviteToken,
-        note: m.note,
-      }))}
+      owner={{ name: event.user.name, email: event.user.email }}
+      races={event.races}
+      initialMembers={members.map((m) => {
+        let raceIds: string[] = []
+        try {
+          raceIds = JSON.parse(m.raceIds) as string[]
+        } catch {
+          raceIds = []
+        }
+        return {
+          id: m.id,
+          name: m.name,
+          email: m.email,
+          phone: m.phone,
+          role: m.role,
+          status: m.status,
+          inviteToken: m.inviteToken,
+          raceIds,
+          note: m.note,
+        }
+      })}
       initialPartners={partners.map((p) => ({
         id: p.id,
         name: p.name,
