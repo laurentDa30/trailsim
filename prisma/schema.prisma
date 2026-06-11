@@ -98,6 +98,9 @@ model Segment {
   label      String?
   width      Float   @default(1.0)
   techLevel  Int     @default(1)
+  // RAVITO only: pause imposed at this point, in seconds. Null = use each
+  // runner profile's ravitoDuration (per-archetype default).
+  ravitoSec  Int?
   note       String?
   lat        Float   @default(0)
   lng        Float   @default(0)

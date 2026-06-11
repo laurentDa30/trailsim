@@ -11,6 +11,8 @@ const SegmentCreateSchema = z.object({
   techLevel: z.number().int().min(0).max(5).default(1),
   lengthM: z.number().int().min(20).max(2000).default(200),
   label: z.string().optional(),
+  // RAVITO only: pause at this point in seconds (null = per-profile default)
+  ravitoSec: z.number().int().min(0).max(7200).nullable().optional(),
 })
 
 async function authorizeRace(sessionUserId: string, eventId: string, raceId: string) {
@@ -69,6 +71,7 @@ export async function POST(
         techLevel: parsed.data.techLevel,
         lengthM: parsed.data.lengthM,
         label: parsed.data.label,
+        ravitoSec: parsed.data.ravitoSec ?? null,
       },
     })
     return Response.json(segment, { status: 201 })

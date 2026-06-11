@@ -46,6 +46,8 @@ export interface ConstraintMarker {
   type: string
   indexStart: number
   lengthM: number
+  // RAVITO only: pause at this point in seconds (null = per-profile default)
+  ravitoSec?: number | null
 }
 
 /** GPX points covered by a zone of `lengthM` centred on `indexStart`. */
@@ -66,6 +68,8 @@ interface ConstraintMapProps {
   placingPreset: string | null
   onPlace: (raceId: string, indexStart: number, lat: number, lng: number) => void
   onRemove: (id: string) => void
+  /** RAVITO markers: set/clear the per-point pause (seconds; null = per-profile). */
+  onSetRavitoSec?: (id: string, sec: number | null) => void
   /** Races currently shown; placement and rendering ignore hidden ones. */
   visibleRaces?: Set<string>
   // Logistics (free placement, not snapped to the trace)
@@ -163,6 +167,7 @@ export default function ConstraintMap({
   placingPreset,
   onPlace,
   onRemove,
+  onSetRavitoSec,
   visibleRaces,
   logistics = [],
   placingLogiType = null,
@@ -223,9 +228,40 @@ export default function ConstraintMap({
           return (
             <Marker key={c.id} position={[c.lat, c.lng]} icon={constraintIcon(preset.letter, preset.color)}>
               <Popup>
-                <div ref={stopMapClicks} style={{ minWidth: 130 }}>
+                <div ref={stopMapClicks} style={{ minWidth: 150 }}>
                   <div style={{ fontWeight: 700, marginBottom: 4, color: preset.color }}>{preset.label}</div>
                   <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>{preset.description}</div>
+                  {c.type === 'RAVITO' && onSetRavitoSec && (
+                    <label style={{ display: 'block', fontSize: 11, color: '#444', marginBottom: 8 }}>
+                      Pause (min)
+                      <input
+                        type="number"
+                        min={0}
+                        max={120}
+                        step={1}
+                        placeholder="par profil"
+                        defaultValue={c.ravitoSec != null ? Math.round(c.ravitoSec / 60) : ''}
+                        onBlur={(e) => {
+                          const v = e.currentTarget.value.trim()
+                          onSetRavitoSec(c.id, v === '' ? null : Math.max(0, Math.round(Number(v))) * 60)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
+                        }}
+                        style={{
+                          width: '100%',
+                          marginTop: 3,
+                          padding: '3px 6px',
+                          borderRadius: 6,
+                          border: '1px solid #ccc',
+                          fontSize: 12,
+                        }}
+                      />
+                      <span style={{ fontSize: 10, color: '#888' }}>
+                        Vide = durée du profil coureur
+                      </span>
+                    </label>
+                  )}
                   <button
                     onClick={() => onRemove(c.id)}
                     style={{

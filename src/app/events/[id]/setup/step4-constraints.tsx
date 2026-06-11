@@ -18,7 +18,7 @@ interface RaceLike {
   name: string
   color: string
   gpxPoints: string
-  segments?: { id: string; type: string; lat: number; lng: number; indexStart: number; lengthM: number }[]
+  segments?: { id: string; type: string; lat: number; lng: number; indexStart: number; lengthM: number; ravitoSec?: number | null }[]
 }
 
 interface Step4ConstraintsProps {
@@ -77,6 +77,7 @@ export function Step4Constraints({
         type: s.type,
         indexStart: s.indexStart,
         lengthM: s.lengthM,
+        ravitoSec: s.ravitoSec ?? null,
       }))
     )
   )
@@ -136,6 +137,21 @@ export function Step4Constraints({
           { id: seg.id, raceId, lat, lng, type: preset.type, indexStart, lengthM: zoneLength },
         ])
       }
+    } catch {
+      /* ignore transient errors */
+    }
+  }
+
+  async function handleSetRavitoSec(id: string, sec: number | null) {
+    const c = constraints.find((x) => x.id === id)
+    if (!c || (c.ravitoSec ?? null) === sec) return
+    setConstraints((prev) => prev.map((x) => (x.id === id ? { ...x, ravitoSec: sec } : x)))
+    try {
+      await fetch(`/api/events/${eventId}/races/${c.raceId}/segments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ravitoSec: sec }),
+      })
     } catch {
       /* ignore transient errors */
     }
@@ -447,6 +463,7 @@ export function Step4Constraints({
             placingPreset={placingPreset}
             onPlace={handlePlace}
             onRemove={handleRemove}
+            onSetRavitoSec={handleSetRavitoSec}
             visibleRaces={visibleRaces}
             logistics={logistics}
             placingLogiType={placingLogiType}

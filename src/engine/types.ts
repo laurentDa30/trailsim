@@ -55,6 +55,11 @@ export interface Constraint {
   influenceKm: number   // length of the constrained stretch
 }
 
+export interface RavitoPoint {
+  pos: number                 // fraction 0-1 of the race
+  durationSec: number | null  // pause override; null = runner profile's ravitoDuration
+}
+
 export interface RaceConfig {
   id: string
   name: string
@@ -64,7 +69,7 @@ export interface RaceConfig {
   gpxPoints: GPXPoint[]
   profiles: RunnerProfile[]
   constraints?: Constraint[]
-  ravitos?: number[]    // ravito positions as fractions 0-1 of the race
+  ravitos?: RavitoPoint[] // only the organiser's placed ravitos (none = no stops)
 }
 
 export interface SimConfig {

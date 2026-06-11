@@ -48,6 +48,7 @@ export default async function SimulatePage({ params }: PageProps) {
       width: s.width,
       techLevel: s.techLevel,
       lengthM: s.lengthM,
+      ravitoSec: s.ravitoSec,
     })),
   }))
 

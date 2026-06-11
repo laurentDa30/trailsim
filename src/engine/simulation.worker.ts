@@ -9,6 +9,7 @@ import type {
   CompressedSimulationResult,
   GPXPoint,
   RaceConfig,
+  RavitoPoint,
   RiskMapEntry,
   RunnerState,
   SimConfig,
@@ -203,14 +204,14 @@ async function runSimulation(config: SimConfig): Promise<void> {
         })
       }
 
-      // Ravito checkpoint positions (fraction 0–1 of each race): use the
-      // organiser's placed ravitos, falling back to ~33% / ~66% if none.
-      const ravitoPositions: Map<string, number[]> = new Map()
+      // Ravito checkpoints (fraction 0–1 of each race): ONLY the organiser's
+      // placed ravitos. No ravito placed = no forced stop — no invisible
+      // defaults skewing the times.
+      const ravitoPositions: Map<string, RavitoPoint[]> = new Map()
       for (const { race } of raceMeta) {
         const pts = race.gpxPoints
         if (pts.length < 2) { ravitoPositions.set(race.id, []); continue }
-        const placed = race.ravitos ?? []
-        ravitoPositions.set(race.id, placed.length > 0 ? placed : [0.33, 0.66])
+        ravitoPositions.set(race.id, race.ravitos ?? [])
       }
 
       // Track which runners have already stopped at each ravito
@@ -373,13 +374,14 @@ async function runSimulation(config: SimConfig): Promise<void> {
             }
           }
 
-          // Check for ravito stop
+          // Check for ravito stop — the point's own duration wins over the
+          // runner profile's default.
           const ravitos = ravitoPositions.get(race.id) ?? []
           const visited = visitedRavito.get(runner.id)!
           for (let ri = 0; ri < ravitos.length; ri++) {
-            if (!visited.has(ri) && state.position >= ravitos[ri]) {
+            if (!visited.has(ri) && state.position >= ravitos[ri].pos) {
               visited.add(ri)
-              state.atRavito = runner.ravitoDuration
+              state.atRavito = ravitos[ri].durationSec ?? runner.ravitoDuration
               break
             }
           }

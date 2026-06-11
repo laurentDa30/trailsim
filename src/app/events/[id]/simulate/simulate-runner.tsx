@@ -34,7 +34,7 @@ interface SimulateRunnerProps {
     color: string
     gpxPoints: string
     startTime: number
-    segments: { type: string; indexStart: number; width: number; techLevel: number; lengthM: number }[]
+    segments: { type: string; indexStart: number; width: number; techLevel: number; lengthM: number; ravitoSec?: number | null }[]
   }[]
 }
 
@@ -223,15 +223,19 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
               techLevel: s.techLevel,
               influenceKm: (s.lengthM ?? 200) / 1000,
             })),
-          // Placed ravito points → positions as fractions of the race
+          // Placed ravito points → position (fraction of the race) + per-point
+          // pause override (null = the runner profile's ravitoDuration).
           ravitos: (() => {
             const total = gpxPoints.length > 0 ? gpxPoints[gpxPoints.length - 1].dist : 0
-            if (total <= 0) return [] as number[]
+            if (total <= 0) return []
             return r.segments
               .filter((s) => s.type === 'RAVITO')
-              .map((s) => (gpxPoints[s.indexStart]?.dist ?? 0) / total)
-              .filter((f) => f > 0 && f < 1)
-              .sort((a, b) => a - b)
+              .map((s) => ({
+                pos: (gpxPoints[s.indexStart]?.dist ?? 0) / total,
+                durationSec: s.ravitoSec ?? null,
+              }))
+              .filter((rv) => rv.pos > 0 && rv.pos < 1)
+              .sort((a, b) => a.pos - b.pos)
           })(),
         }
       }),
