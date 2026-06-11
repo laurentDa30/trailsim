@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
+import { getEventAccess, canManage, canRead } from "@/lib/authz"
 import { EventCreateSchema } from "@/lib/validators/simulation"
 import { z } from "zod"
 
@@ -41,7 +42,7 @@ export async function GET(
       return Response.json({ error: "Event not found" }, { status: 404 })
     }
 
-    if (event.userId !== session.user.id) {
+    if (!canRead(await getEventAccess(session.user.id, id))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -68,7 +69,7 @@ export async function PUT(
     if (!event) {
       return Response.json({ error: "Event not found" }, { status: 404 })
     }
-    if (event.userId !== session.user.id) {
+    if (!canManage(await getEventAccess(session.user.id, id))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -113,7 +114,7 @@ export async function PATCH(
     if (!event) {
       return Response.json({ error: "Event not found" }, { status: 404 })
     }
-    if (event.userId !== session.user.id) {
+    if (!canManage(await getEventAccess(session.user.id, id))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -147,6 +148,7 @@ export async function DELETE(
     if (!event) {
       return Response.json({ error: "Event not found" }, { status: 404 })
     }
+    // Deleting the event stays owner-only — a co-organiser can't destroy it.
     if (event.userId !== session.user.id) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }

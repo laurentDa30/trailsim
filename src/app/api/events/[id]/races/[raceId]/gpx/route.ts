@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
+import { getEventAccess, canManage, canRead } from "@/lib/authz"
 import type { GPXPoint } from "@/engine/types"
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -35,7 +36,7 @@ export async function POST(
 
     const event = await db.event.findUnique({ where: { id } })
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 })
-    if (event.userId !== session.user.id) return Response.json({ error: "Forbidden" }, { status: 403 })
+    if (!canManage(await getEventAccess(session.user.id, id))) return Response.json({ error: "Forbidden" }, { status: 403 })
 
     const race = await db.race.findUnique({ where: { id: raceId } })
     if (!race || race.eventId !== id) return Response.json({ error: "Race not found" }, { status: 404 })

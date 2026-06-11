@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
+import { getEventAccess, canManage, canRead } from "@/lib/authz"
 import { z } from "zod"
 
 const RaceUpdateSchema = z.object({
@@ -17,7 +18,7 @@ async function authorizeRace(
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const event = await db.event.findUnique({ where: { id: eventId } })
   if (!event) return { ok: false, status: 404, error: "Event not found" }
-  if (event.userId !== sessionUserId) return { ok: false, status: 403, error: "Forbidden" }
+  if (!canManage(await getEventAccess(sessionUserId, eventId))) return { ok: false, status: 403, error: "Forbidden" }
   const race = await db.race.findUnique({ where: { id: raceId } })
   if (!race || race.eventId !== eventId) return { ok: false, status: 404, error: "Race not found" }
   return { ok: true }

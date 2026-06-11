@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
+import { getEventAccess, canManage } from "@/lib/authz"
 import { z } from "zod"
 
 const SegmentPatchSchema = z.object({
@@ -19,7 +20,7 @@ export async function PATCH(
 
     const event = await db.event.findUnique({ where: { id } })
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 })
-    if (event.userId !== session.user.id) return Response.json({ error: "Forbidden" }, { status: 403 })
+    if (!canManage(await getEventAccess(session.user.id, id))) return Response.json({ error: "Forbidden" }, { status: 403 })
 
     const segment = await db.segment.findUnique({ where: { id: segId } })
     if (!segment || segment.raceId !== raceId) {
@@ -55,7 +56,7 @@ export async function DELETE(
 
     const event = await db.event.findUnique({ where: { id } })
     if (!event) return Response.json({ error: "Event not found" }, { status: 404 })
-    if (event.userId !== session.user.id) return Response.json({ error: "Forbidden" }, { status: 403 })
+    if (!canManage(await getEventAccess(session.user.id, id))) return Response.json({ error: "Forbidden" }, { status: 403 })
 
     const segment = await db.segment.findUnique({ where: { id: segId } })
     if (!segment || segment.raceId !== raceId) {

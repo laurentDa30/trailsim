@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation"
 import db from "@/lib/db"
+import { auth } from "@/lib/auth"
+import { getEventAccess, canRead } from "@/lib/authz"
 import { SetupWizard } from "./setup-wizard"
 
 interface PageProps {
@@ -27,6 +29,9 @@ export default async function SetupPage({ params }: PageProps) {
   if (!event) {
     notFound()
   }
+
+  const session = await auth()
+  if (!session?.user?.id || !canRead(await getEventAccess(session.user.id, id))) notFound()
 
   return (
     <SetupWizard

@@ -15,6 +15,7 @@ model User {
   events       Event[]
   accounts     Account[]
   sessions     Session[]
+  memberships  EventMember[]
 }
 
 model Account {
@@ -65,6 +66,45 @@ model Event {
   user        User         @relation(fields: [userId], references: [id])
   races       Race[]
   simulations Simulation[]
+  members     EventMember[]
+  partners    Partner[]
+}
+
+// A person attached to an event: co-organiser, volunteer… The record can exist
+// without an account (name/phone only); claiming the invite link binds a userId
+// and gives that person access to the event according to their role.
+model EventMember {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name        String
+  email       String?
+  phone       String?
+  // ORGANISATEUR (manage everything except deleting the event) | BENEVOLE (read)
+  role        String   @default("BENEVOLE")
+  // INVITE (created, link not claimed) | ACTIF (claimed by a user account)
+  status      String   @default("INVITE")
+  inviteToken String   @unique @default(cuid())
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@unique([eventId, userId])
+}
+
+// Partner organisation of an event (sponsor, mairie, secours, presse…).
+model Partner {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name        String
+  kind        String   @default("SPONSOR") // SPONSOR | INSTITUTION | SECOURS | PRESSE | AUTRE
+  contactName String?
+  email       String?
+  phone       String?
+  note        String?
+  createdAt   DateTime @default(now())
 }
 
 model Race {

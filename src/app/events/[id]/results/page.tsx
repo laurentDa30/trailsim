@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/auth'
+import { getEventAccess, canRead } from '@/lib/authz'
 import db from '@/lib/db'
 import { Topbar } from '@/components/layout/topbar'
 import { Badge } from '@/components/ui/badge'
@@ -62,7 +63,7 @@ export default async function SimulationsHistoryPage({ params }: PageProps) {
     },
   })
 
-  if (!event || event.userId !== session.user.id) notFound()
+  if (!event || !canRead(await getEventAccess(session.user.id, event.id))) notFound()
 
   const sims = event.simulations
 

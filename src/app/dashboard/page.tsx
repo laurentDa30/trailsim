@@ -14,8 +14,14 @@ export default async function DashboardPage() {
     redirect("/login")
   }
 
+  // Owned events + events the user joined as an active member (équipe).
   const events = await db.event.findMany({
-    where: { userId: session.user.id },
+    where: {
+      OR: [
+        { userId: session.user.id },
+        { members: { some: { userId: session.user.id, status: "ACTIF" } } },
+      ],
+    },
     include: {
       _count: { select: { simulations: true } },
       races: {

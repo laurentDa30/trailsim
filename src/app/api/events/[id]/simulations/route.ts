@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
+import { getEventAccess, canManage, canRead } from "@/lib/authz"
 import { SimulationCreateSchema } from "@/lib/validators/simulation"
 
 export async function GET(
@@ -18,7 +19,7 @@ export async function GET(
     if (!event) {
       return Response.json({ error: "Event not found" }, { status: 404 })
     }
-    if (event.userId !== session.user.id) {
+    if (!canRead(await getEventAccess(session.user.id, id))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -51,7 +52,7 @@ export async function POST(
     if (!event) {
       return Response.json({ error: "Event not found" }, { status: 404 })
     }
-    if (event.userId !== session.user.id) {
+    if (!canManage(await getEventAccess(session.user.id, id))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 

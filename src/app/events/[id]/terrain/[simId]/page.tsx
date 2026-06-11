@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation'
 import db from '@/lib/db'
+import { auth } from '@/lib/auth'
+import { getEventAccess, canRead } from '@/lib/authz'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
 import { clusterRiskZones, computePassageByKmBin, type RaceLite, type PassageBin } from '@/lib/report-metrics'
 import type { OpMapRace, OpMapZone } from '../../report/[simId]/operational-map'
@@ -23,6 +25,9 @@ export default async function TerrainPage({ params }: PageProps) {
 
   const sim = await db.simulation.findUnique({ where: { id: simId }, include: { event: true } })
   if (!sim) notFound()
+
+  const session = await auth()
+  if (!session?.user?.id || !canRead(await getEventAccess(session.user.id, sim.eventId))) notFound()
 
   const races = await db.race.findMany({ where: { eventId: id }, include: { segments: true } })
 

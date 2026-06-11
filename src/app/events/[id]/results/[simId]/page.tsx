@@ -1,5 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import db from '@/lib/db'
+import { auth } from '@/lib/auth'
+import { getEventAccess, canRead } from '@/lib/authz'
 import { CompressedSimulationResult } from '@/engine/types'
 import type { GPXPoint } from '@/engine/types'
 import { ResultsView } from './results-view'
@@ -22,6 +24,9 @@ export default async function ResultsPage({ params }: PageProps) {
   if (!simulation) {
     notFound()
   }
+
+  const session = await auth()
+  if (!session?.user?.id || !canRead(await getEventAccess(session.user.id, simulation.eventId))) notFound()
 
   if (simulation.status !== 'DONE') {
     redirect(`/events/${id}/simulate`)

@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
+import { getEventAccess, canManage, canRead } from "@/lib/authz"
 import { z } from "zod"
 
 const SegmentCreateSchema = z.object({
@@ -15,10 +16,12 @@ const SegmentCreateSchema = z.object({
   ravitoSec: z.number().int().min(0).max(7200).nullable().optional(),
 })
 
-async function authorizeRace(sessionUserId: string, eventId: string, raceId: string) {
+async function authorizeRace(sessionUserId: string, eventId: string, raceId: string, mode: "read" | "manage" = "manage") {
   const event = await db.event.findUnique({ where: { id: eventId } })
   if (!event) return { ok: false as const, status: 404, error: "Event not found" }
-  if (event.userId !== sessionUserId) return { ok: false as const, status: 403, error: "Forbidden" }
+  const access = await getEventAccess(sessionUserId, eventId)
+  if (mode === "read" ? !canRead(access) : !canManage(access))
+    return { ok: false as const, status: 403, error: "Forbidden" }
   const race = await db.race.findUnique({ where: { id: raceId } })
   if (!race || race.eventId !== eventId) return { ok: false as const, status: 404, error: "Race not found" }
   return { ok: true as const }
@@ -32,7 +35,7 @@ export async function GET(
     const session = await auth()
     if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 })
     const { id, raceId } = await params
-    const authz = await authorizeRace(session.user.id, id, raceId)
+    const authz = await authorizeRace(session.user.id, id, raceId, "read")
     if (!authz.ok) return Response.json({ error: authz.error }, { status: authz.status })
     const segments = await db.segment.findMany({ where: { raceId } })
     return Response.json(segments)

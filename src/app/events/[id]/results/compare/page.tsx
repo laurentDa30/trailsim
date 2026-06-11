@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/auth'
+import { getEventAccess, canRead } from '@/lib/authz'
 import db from '@/lib/db'
 import { Topbar } from '@/components/layout/topbar'
 import { ArrowLeftIcon } from 'lucide-react'
@@ -148,7 +149,7 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
       },
     },
   })
-  if (!event || event.userId !== session.user.id) notFound()
+  if (!event || !canRead(await getEventAccess(session.user.id, event.id))) notFound()
 
   const sims = event.simulations as unknown as SimRow[]
   const options = sims.map((s) => ({ id: s.id, label: `${s.name} · ${fmtDate(s.createdAt)}` }))

@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
+import { getEventAccess, canManage, canRead } from "@/lib/authz"
 import { z } from "zod"
 
 const SimulationUpdateSchema = z.object({
@@ -32,7 +33,7 @@ export async function GET(
       return Response.json({ error: "Simulation not found" }, { status: 404 })
     }
 
-    if (simulation.event.userId !== session.user.id) {
+    if (!canRead(await getEventAccess(session.user.id, simulation.eventId))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -64,7 +65,7 @@ export async function PATCH(
       return Response.json({ error: "Simulation not found" }, { status: 404 })
     }
 
-    if (simulation.event.userId !== session.user.id) {
+    if (!canManage(await getEventAccess(session.user.id, simulation.eventId))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -112,7 +113,7 @@ export async function DELETE(
     if (!simulation) {
       return Response.json({ error: "Simulation not found" }, { status: 404 })
     }
-    if (simulation.event.userId !== session.user.id) {
+    if (!canManage(await getEventAccess(session.user.id, simulation.eventId))) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 

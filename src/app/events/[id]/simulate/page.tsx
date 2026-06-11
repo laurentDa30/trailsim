@@ -1,5 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import db from '@/lib/db'
+import { auth } from '@/lib/auth'
+import { getEventAccess, canRead } from '@/lib/authz'
 import { SimulateRunner } from './simulate-runner'
 
 interface PageProps {
@@ -29,6 +31,9 @@ export default async function SimulatePage({ params }: PageProps) {
   if (!event) {
     notFound()
   }
+
+  const session = await auth()
+  if (!session?.user?.id || !canRead(await getEventAccess(session.user.id, id))) notFound()
 
   const simulation = event.simulations[0] ?? null
 
