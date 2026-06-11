@@ -203,15 +203,14 @@ export default function LoginPage() {
               avec précision
             </h2>
             <p className="text-base leading-relaxed max-w-md" style={{ color: "var(--color-ink-3)" }}>
-              Simulation Monte-Carlo jusqu'à 100 runs, carte interactive,
-              gestion des effectifs.
+              Simulation jusqu'à 300 runs, carte interactive, gestion des effectifs.
             </p>
           </div>
 
           {/* Feature bullets */}
           <div className="flex flex-col gap-3">
             {[
-              { icon: BarChart2, label: "Simulation Monte-Carlo — jusqu'à 100 runs" },
+              { icon: BarChart2, label: "Simulation — jusqu'à 300 runs" },
               { icon: MapPin,    label: "Carte interactive & placement terrain" },
               { icon: Users,     label: "Gestion des effectifs et bénévoles" },
             ].map(({ icon: Icon, label }) => (
