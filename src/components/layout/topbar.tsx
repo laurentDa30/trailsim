@@ -8,7 +8,7 @@ import { ThemeToggle } from './theme-toggle'
 type StatusKey = 'config' | 'sim' | 'results'
 
 interface TopbarProps {
-  activePage: 'dashboard' | 'config' | 'simulate' | 'results'
+  activePage: 'dashboard' | 'config' | 'simulate' | 'results' | 'equipe'
   eventId?: string
   eventName?: string
   eventDate?: string

@@ -1,0 +1,66 @@
+import { notFound } from 'next/navigation'
+import db from '@/lib/db'
+import { auth } from '@/lib/auth'
+import { getEventAccess, canManage, canRead } from '@/lib/authz'
+import { EquipeView } from './equipe-view'
+
+interface PageProps {
+  params: Promise<{ id: string }>
+}
+
+export default async function EquipePage({ params }: PageProps) {
+  const { id } = await params
+
+  const session = await auth()
+  if (!session?.user?.id) notFound()
+  const access = await getEventAccess(session.user.id, id)
+  if (!canRead(access)) notFound()
+
+  const event = await db.event.findUnique({
+    where: { id },
+    select: { id: true, name: true, location: true, date: true },
+  })
+  if (!event) notFound()
+
+  const [members, partners] = await Promise.all([
+    db.eventMember.findMany({
+      where: { eventId: id },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    }),
+    db.partner.findMany({
+      where: { eventId: id },
+      orderBy: [{ kind: 'asc' }, { createdAt: 'asc' }],
+    }),
+  ])
+
+  return (
+    <EquipeView
+      event={{
+        id: event.id,
+        name: event.name,
+        location: event.location,
+        date: event.date ? event.date.toISOString() : null,
+      }}
+      initialMembers={members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        phone: m.phone,
+        role: m.role,
+        status: m.status,
+        inviteToken: m.inviteToken,
+        note: m.note,
+      }))}
+      initialPartners={partners.map((p) => ({
+        id: p.id,
+        name: p.name,
+        kind: p.kind,
+        contactName: p.contactName,
+        email: p.email,
+        phone: p.phone,
+        note: p.note,
+      }))}
+      canEdit={canManage(access)}
+    />
+  )
+}
