@@ -556,7 +556,11 @@ async function runSimulation(config: SimConfig): Promise<void> {
           race.totalRunners
         )
         for (const runner of runners) {
-          const positions = lastRunTrajectories.get(runner.id) ?? new Array(nTimestamps).fill(0)
+          const raw = lastRunTrajectories.get(runner.id) ?? new Array(nTimestamps).fill(0)
+          // Round to 4 decimals (≈5 m on a 50 km course): raw doubles serialise
+          // to ~17 chars each and triple the snapshot size, which breaks the
+          // upload on big pelotons (host request-body limits).
+          const positions = raw.map((p) => Math.round(p * 10000) / 10000)
           runnersData.push({
             runnerId: runner.id,
             raceId: runner.raceId,

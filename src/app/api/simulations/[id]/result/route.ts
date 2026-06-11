@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib"
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
 import { getEventAccess, canManage, canRead } from "@/lib/authz"
@@ -33,7 +34,15 @@ export async function PATCH(
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const body = await request.json()
+    // Large snapshots arrive gzip-compressed from the browser (the raw JSON of
+    // a big peloton exceeds host request-body limits).
+    let body: unknown
+    if (request.headers.get("x-content-codec") === "gzip") {
+      const buf = Buffer.from(await request.arrayBuffer())
+      body = JSON.parse(gunzipSync(buf).toString("utf8"))
+    } else {
+      body = await request.json()
+    }
     const parsed = ResultSchema.safeParse(body)
     if (!parsed.success) {
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
@@ -48,6 +57,8 @@ export async function PATCH(
         resultSnapshot: JSON.stringify(resultSnapshot),
         ...(riskMap !== undefined && { riskMap: JSON.stringify(riskMap) }),
       },
+      // Don't echo the multi-MB snapshot back to the client.
+      select: { id: true, status: true },
     })
 
     return Response.json(updated)

@@ -98,6 +98,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
   // made the results page see status=PENDING, bounce back here, and re-run
   // the whole simulation.
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
   // A simulation already computed in a previous session must NOT recompute just
   // because the user clicked "Simulation" in the nav — only a fresh (PENDING)
   // run auto-starts. `started` flips when a run is launched this session.
@@ -297,17 +298,42 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
   async function saveResult() {
     if (!state.result) return
     setSaveState('saving')
+    setSaveError(null)
     try {
-      const res = await fetch(`/api/simulations/${simulation.id}/result`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resultSnapshot: state.result,
-        }),
-      })
-      setSaveState(res.ok ? 'saved' : 'error')
-    } catch {
+      const json = JSON.stringify({ resultSnapshot: state.result })
+      let res: Response
+      if (typeof CompressionStream !== 'undefined') {
+        // Big pelotons produce multi-MB snapshots that exceed host request-body
+        // limits (~4.5 MB on Vercel). Trajectories gzip extremely well (×8-15),
+        // so compress in the browser and let the API inflate.
+        const gz = await new Response(
+          new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))
+        ).arrayBuffer()
+        res = await fetch(`/api/simulations/${simulation.id}/result`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/octet-stream', 'X-Content-Codec': 'gzip' },
+          body: gz,
+        })
+      } else {
+        res = await fetch(`/api/simulations/${simulation.id}/result`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: json,
+        })
+      }
+      if (res.ok) {
+        setSaveState('saved')
+      } else {
+        setSaveState('error')
+        setSaveError(
+          res.status === 413
+            ? `HTTP 413 — résultat trop volumineux pour l'hébergeur`
+            : `HTTP ${res.status}`
+        )
+      }
+    } catch (err) {
       setSaveState('error')
+      setSaveError(err instanceof Error ? err.message : 'erreur réseau')
     }
   }
 
@@ -759,7 +785,8 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
                   Réessayer l&apos;enregistrement
                 </Button>
                 <span className="text-xs" style={{ color: 'var(--color-danger, #DC2626)' }}>
-                  Le résultat n&apos;a pas pu être enregistré — il sera perdu si vous quittez la page.
+                  Le résultat n&apos;a pas pu être enregistré
+                  {saveError ? ` (${saveError})` : ''} — il sera perdu si vous quittez la page.
                 </span>
               </div>
             )}
