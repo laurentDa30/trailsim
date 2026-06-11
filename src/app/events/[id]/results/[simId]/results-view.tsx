@@ -32,6 +32,9 @@ import {
 } from 'lucide-react'
 import { RiskBadge } from '@/components/layout/risk-badge'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
+// Single source of truth for the headline stats — the same module the PDF
+// report uses, so both screens can never diverge again.
+import { clusterRiskZones, computePerRaceStats, type PerRaceStat } from '@/lib/report-metrics'
 
 const LeafletMap = dynamic(() => import('./leaflet-map'), {
   ssr: false,
@@ -77,59 +80,6 @@ function formatTimeHHMM(seconds: number): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   return `${String(h).padStart(2, '0')}h${String(m).padStart(2, '0')}`
-}
-
-interface ClusteredRisk {
-  raceId: string
-  segmentIndex: number
-  riskScore: number
-  jamProbability: number
-  peakDensity: number
-  dist: number
-  kind: 'bouchon' | 'affluence'
-}
-
-/**
- * Merge near-duplicate risk segments. A dense GPX track produces one risk
- * entry per ~20 m point, so the start line alone can yield dozens of rows.
- * Group consecutive entries (per race, within `gapKm`) and keep the worst one.
- */
-function clusterRiskZones(
-  entries: { raceId: string; segmentIndex: number; riskScore: number; jamProbability: number; peakDensity: number; kind?: 'bouchon' | 'affluence' }[],
-  races: { id: string; gpxPoints: GPXPoint[] }[],
-  gapKm = 0.4
-): ClusteredRisk[] {
-  const byRace = new Map<string, ClusteredRisk[]>()
-  for (const e of entries) {
-    const race = races.find((r) => r.id === e.raceId)
-    const dist = race?.gpxPoints[e.segmentIndex]?.dist ?? 0
-    if (!byRace.has(e.raceId)) byRace.set(e.raceId, [])
-    byRace.get(e.raceId)!.push({ ...e, dist, kind: e.kind ?? 'affluence' })
-  }
-
-  const out: ClusteredRisk[] = []
-  for (const list of byRace.values()) {
-    list.sort((a, b) => a.dist - b.dist)
-    let cluster: ClusteredRisk[] = []
-    const flush = () => {
-      if (cluster.length === 0) return
-      const best = cluster.reduce((m, c) => (c.riskScore > m.riskScore ? c : m), cluster[0])
-      out.push({
-        ...best,
-        peakDensity: Math.max(...cluster.map((c) => c.peakDensity)),
-        jamProbability: Math.max(...cluster.map((c) => c.jamProbability)),
-        // Bouchon takes priority if any sub-segment in the cluster is one
-        kind: cluster.some((c) => c.kind === 'bouchon') ? 'bouchon' : 'affluence',
-      })
-      cluster = []
-    }
-    for (const e of list) {
-      if (cluster.length > 0 && e.dist - cluster[cluster.length - 1].dist > gapKm) flush()
-      cluster.push(e)
-    }
-    flush()
-  }
-  return out
 }
 
 function Section({
@@ -485,117 +435,38 @@ export function ResultsView({
     return set
   }, [collisionWindows])
 
-  // First finisher: earliest time any runner reaches the finish, + which race
+  // All headline stats come from the shared module (same code path as the PDF
+  // report): winner duration excludes the wave's departure, DNF reflects the
+  // weather's effect on abandons, maxLocal is the 150 m crowding peak.
+  const perRaceStats: PerRaceStat[] = useMemo(() => {
+    if (!result) {
+      return races.map((r) => ({
+        id: r.id, name: r.name, color: r.color, total: 0,
+        firstDuration: null, departSec: null, finishSec: null,
+        dnf: 0, dnfRate: 0, maxLocal: 0, zones: 0,
+      }))
+    }
+    return computePerRaceStats(result, races, riskMap)
+  }, [result, races, riskMap])
+
+  // First finisher across all races = earliest absolute arrival (T+ clock).
+  // Its running time (firstDuration) is shown alongside so the figure can't be
+  // confused with the per-race "Durée vainqueur".
   const firstFinish = useMemo(() => {
-    let best = Infinity
-    let raceId: string | null = null
-    for (const r of runnersData) {
-      for (let t = 0; t < r.positions.length; t++) {
-        if (r.positions[t] >= 1) {
-          const sec = rawTimestamps[t]
-          if (sec != null && sec < best) {
-            best = sec
-            raceId = r.raceId
-          }
-          break
-        }
-      }
-    }
-    return isFinite(best) ? { seconds: best, raceId } : null
-  }, [runnersData, rawTimestamps])
+    const arrived = perRaceStats.filter((s) => s.finishSec != null)
+    arrived.sort((a, b) => a.finishSec! - b.finishSec!)
+    return arrived[0] ?? null
+  }, [perRaceStats])
 
-  // DNF = runners who never reach the finish (they abandoned). Counted from the
-  // simulated trajectories, so it reflects the weather's effect on abandons.
-  const dnfEstimate = useMemo(() => {
-    let dnf = 0
-    for (const r of runnersData) {
-      let maxPos = 0
-      for (const p of r.positions) if (p > maxPos) maxPos = p
-      if (maxPos < 0.999) dnf++
-    }
-    return dnf
-  }, [runnersData])
+  const dnfEstimate = useMemo(
+    () => perRaceStats.reduce((acc, s) => acc + s.dnf, 0),
+    [perRaceStats]
+  )
 
-  // Peak LOCAL crowding per race: the most runners concentrated within any
-  // ~150 m stretch at any moment (the real figure for sizing a post / safety),
-  // not the whole-course headcount which is ~always the number of entrants.
-  const maxLocalByRace = useMemo(() => {
-    const BIN_KM = 0.15
-    const totals = new Map<string, number>()
-    for (const race of races) {
-      if (race.gpxPoints.length > 0) totals.set(race.id, race.gpxPoints[race.gpxPoints.length - 1].dist)
-    }
-    const max = new Map<string, number>()
-    for (let t = 0; t < timestamps.length; t++) {
-      const binCounts = new Map<string, number>()
-      for (const r of runnersData) {
-        const p = r.positions[t] ?? 0
-        if (p <= 0 || p >= 1) continue
-        const total = totals.get(r.raceId) ?? 0
-        const bin = total > 0 ? Math.floor((p * total) / BIN_KM) : 0
-        const key = `${r.raceId}#${bin}`
-        binCounts.set(key, (binCounts.get(key) ?? 0) + 1)
-      }
-      for (const [key, c] of binCounts) {
-        const raceId = key.slice(0, key.lastIndexOf('#'))
-        if (c > (max.get(raceId) ?? 0)) max.set(raceId, c)
-      }
-    }
-    return max
-  }, [runnersData, races, timestamps])
-
-  const maxLocalAll = useMemo(() => {
-    let m = 0
-    for (const v of maxLocalByRace.values()) m = Math.max(m, v)
-    return m
-  }, [maxLocalByRace])
-
-  // Per-course breakdown of the key stats
-  const perRaceStats = useMemo(() => {
-    return races.map((race) => {
-      const rRunners = runnersData.filter((r) => r.raceId === race.id)
-      let firstSec = Infinity
-      let departSec = Infinity
-      let dnf = 0
-      for (const r of rRunners) {
-        let maxPos = 0
-        let moved = false
-        for (let t = 0; t < r.positions.length; t++) {
-          const p = r.positions[t]
-          if (p > maxPos) maxPos = p
-          // First instant this runner is moving = its wave's actual départure
-          // in the SNAPSHOT (immune to later edits of race.startTime).
-          if (!moved && p > 0) {
-            moved = true
-            const s = rawTimestamps[t]
-            if (s != null && s < departSec) departSec = s
-          }
-          if (p >= 1) {
-            const s = rawTimestamps[t]
-            if (s != null && s < firstSec) firstSec = s
-            break
-          }
-        }
-        if (maxPos < 0.999) dnf++
-      }
-      const zones = riskMap.filter((e) => e.raceId === race.id).length
-      return {
-        id: race.id,
-        name: race.name,
-        color: race.color,
-        total: rRunners.length,
-        // Winner's running time = finish − the wave's departure, both read from
-        // the stored trajectory, so a staggered start is excluded correctly even
-        // if race.startTime was changed after the run.
-        firstDuration: isFinite(firstSec)
-          ? firstSec - (isFinite(departSec) ? departSec : 0)
-          : null,
-        dnf,
-        maxLocal: maxLocalByRace.get(race.id) ?? 0,
-        zones,
-      }
-    })
-  }, [races, runnersData, rawTimestamps, riskMap, maxLocalByRace])
+  const maxLocalAll = useMemo(
+    () => perRaceStats.reduce((m, s) => Math.max(m, s.maxLocal), 0),
+    [perRaceStats]
+  )
 
   // Per-course profile mix, from the actually simulated runners
   const profilesByRace = useMemo(() => {
@@ -765,10 +636,14 @@ export function ResultsView({
               <StatTile
                 icon={<FlagIcon size={12} />}
                 label="1er arrivé (T+)"
-                value={firstFinish ? formatTimeHHMM(firstFinish.seconds) : '—'}
+                value={firstFinish?.finishSec != null ? formatTimeHHMM(firstFinish.finishSec) : '—'}
                 sub={
                   firstFinish
-                    ? races.find((r) => r.id === firstFinish.raceId)?.name ?? 'course inconnue'
+                    ? `${firstFinish.name}${
+                        firstFinish.firstDuration != null
+                          ? ` · durée ${formatTimeHHMM(firstFinish.firstDuration)}`
+                          : ''
+                      }`
                     : 'toutes courses'
                 }
               />

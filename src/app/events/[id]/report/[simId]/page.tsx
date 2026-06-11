@@ -300,7 +300,17 @@ export default async function ReportPage({ params }: PageProps) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '28px' }}>
           <StatCard value={String(sim.totalRunners)} label="Coureurs" />
           <StatCard value={String(races.length)} label="Courses" />
-          <StatCard value={firstFinish?.finishSec != null ? fmtClock(firstFinish.finishSec) : '—'} label="1ère arrivée (T+)" sub={firstFinish?.name} />
+          <StatCard
+            value={firstFinish?.finishSec != null ? fmtClock(firstFinish.finishSec) : '—'}
+            label="1ère arrivée (T+)"
+            sub={
+              firstFinish
+                ? `${firstFinish.name}${
+                    firstFinish.firstDuration != null ? ` · durée ${fmtClock(firstFinish.firstDuration)}` : ''
+                  }`
+                : undefined
+            }
+          />
           <StatCard value={`≈ ${dnfTotal}`} label="Abandons estimés" tone="warning" />
           <StatCard value={String(maxAffluence)} label="Affluence max /150 m" />
           <StatCard value={String(clustered.length)} label="Zones à risque" />
