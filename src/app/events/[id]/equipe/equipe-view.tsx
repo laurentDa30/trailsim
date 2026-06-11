@@ -9,6 +9,7 @@ import {
   Trash2Icon,
   LinkIcon,
   CheckIcon,
+  RotateCcwIcon,
 } from 'lucide-react'
 
 interface Member {
@@ -150,13 +151,32 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
   }
 
   async function copyInvite(m: Member) {
-    const url = `${window.location.origin}/invite/${m.inviteToken}`
+    // The personal access link: opens the volunteer view directly, no account
+    // needed (the page offers an optional sign-up / organiser claim).
+    const url = `${window.location.origin}/b/${m.inviteToken}`
     try {
       await navigator.clipboard.writeText(url)
       setCopiedId(m.id)
       setTimeout(() => setCopiedId((cur) => (cur === m.id ? null : cur)), 1600)
     } catch {
-      prompt('Copiez le lien d’invitation :', url)
+      prompt('Copiez le lien d’accès :', url)
+    }
+  }
+
+  async function regenerateLink(m: Member) {
+    if (!confirm(`Régénérer le lien de ${m.name} ? L’ancien lien ne fonctionnera plus.`)) return
+    try {
+      const res = await fetch(`/api/events/${event.id}/members/${m.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regenerateToken: true }),
+      })
+      if (res.ok) {
+        const updated = (await res.json()) as Member
+        setMembers((prev) => prev.map((x) => (x.id === m.id ? { ...x, inviteToken: updated.inviteToken } : x)))
+      }
+    } catch {
+      /* ignore */
     }
   }
 
@@ -213,7 +233,7 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
         <SectionCard
           icon={<UsersIcon size={15} />}
           title="Équipe"
-          sub={`${members.length} membre${members.length > 1 ? 's' : ''} — chaque membre reçoit un lien d’invitation à partager (WhatsApp, SMS, email)`}
+          sub={`${members.length} membre${members.length > 1 ? 's' : ''} — chaque membre a un lien d’accès personnel à partager (WhatsApp, SMS) : aucun compte requis pour les bénévoles`}
         >
           {canEdit && (
             <form onSubmit={addMember} className="flex flex-wrap gap-2 mb-3">
@@ -266,9 +286,10 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
 
           {members.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--color-ink-4)' }}>
-              Aucun membre pour l’instant. Ajoutez vos co-organisateurs et bénévoles : ils pourront
-              accéder à l’événement (lecture pour les bénévoles, gestion pour les organisateurs) en
-              réclamant leur lien d’invitation.
+              Aucun membre pour l’instant. Ajoutez vos co-organisateurs et bénévoles, puis
+              partagez-leur leur lien d’accès personnel : les bénévoles y voient l’événement
+              directement, sans créer de compte ; les organisateurs créent un compte pour accéder à
+              la gestion.
             </p>
           ) : (
             <div className="flex flex-col gap-1.5">
@@ -327,7 +348,7 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
                       <button
                         type="button"
                         onClick={() => copyInvite(m)}
-                        title="Copier le lien d’invitation"
+                        title="Copier le lien d’accès personnel (aucun compte requis pour un bénévole)"
                         className="flex items-center gap-1 px-2 py-1 rounded text-[11px] shrink-0"
                         style={{
                           background: 'var(--color-bg-1)',
@@ -336,7 +357,17 @@ export function EquipeView({ event, initialMembers, initialPartners, canEdit }: 
                         }}
                       >
                         {copiedId === m.id ? <CheckIcon size={12} /> : <LinkIcon size={12} />}
-                        {copiedId === m.id ? 'Copié' : 'Inviter'}
+                        {copiedId === m.id ? 'Copié' : 'Lien d’accès'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => regenerateLink(m)}
+                        title="Régénérer le lien (révoque l’ancien)"
+                        aria-label="Régénérer le lien"
+                        className="p-1 rounded shrink-0"
+                        style={{ color: 'var(--color-ink-4)' }}
+                      >
+                        <RotateCcwIcon size={12} />
                       </button>
                       <button
                         type="button"

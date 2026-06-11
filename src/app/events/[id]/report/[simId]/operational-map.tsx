@@ -49,6 +49,12 @@ interface Props {
   showInventory?: boolean
   /** Per-race passage windows (km bins) → each poste shows its active créneau. */
   passageByRace?: Record<string, PassageBin[]>
+  /**
+   * Server-side logistics fallback (Simulation.logistique). Used when this
+   * browser has no localStorage copy — e.g. a volunteer opening their token
+   * link on their own phone.
+   */
+  initialLogistics?: PlacedLogi[]
 }
 
 const VB_W = 1000
@@ -132,17 +138,17 @@ function nearest(races: OpMapRace[], lat: number, lng: number): { race: OpMapRac
   return best
 }
 
-export function OperationalMap({ simId, races, zones, height = 460, showInventory = true, passageByRace }: Props) {
+export function OperationalMap({ simId, races, zones, height = 460, showInventory = true, passageByRace, initialLogistics }: Props) {
   // Placed logistics live in the browser (localStorage), seeded at config time.
   const [logistics] = useState<PlacedLogi[]>(() => {
-    if (typeof window === 'undefined') return []
+    if (typeof window === 'undefined') return initialLogistics ?? []
     try {
       const raw = localStorage.getItem(logiStorageKey(simId))
       if (raw) return JSON.parse(raw) as PlacedLogi[]
     } catch {
       /* ignore */
     }
-    return []
+    return initialLogistics ?? []
   })
 
   const proj = useMemo(() => buildProjection(races, zones, logistics), [races, zones, logistics])

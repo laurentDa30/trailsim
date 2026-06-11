@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-const PUBLIC_PATHS = ["/login", "/register", "/api/auth"]
+// "/b/" is the volunteers' token-link view: access IS the token, no account.
+const PUBLIC_PATHS = ["/login", "/register", "/api/auth", "/b/"]
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
