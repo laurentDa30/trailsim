@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { LayoutDashboard, Settings, Play, BarChart2, Users } from 'lucide-react'
+import { LayoutDashboard, Settings, Play, BarChart2, Users, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -47,6 +47,12 @@ export function PageNav({ activePage, eventId }: PageNavProps) {
       label: 'Équipe',
       href: eventId ? `/events/${eventId}/equipe` : '#',
       icon: <Users size={14} />,
+    },
+    {
+      key: 'taches',
+      label: 'Tâches',
+      href: eventId ? `/events/${eventId}/taches` : '#',
+      icon: <ClipboardList size={14} />,
     },
   ]
 

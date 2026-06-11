@@ -68,6 +68,22 @@ model Event {
   simulations Simulation[]
   members     EventMember[]
   partners    Partner[]
+  tasks       Task[]
+}
+
+// Organisation checklist item with an optional deadline (déclaration préfecture,
+// convention secours, balisage…). Reminders are derived from dueDate.
+model Task {
+  id        String    @id @default(cuid())
+  eventId   String
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title     String
+  category  String    @default("GENERAL") // ADMINISTRATIF | SECURITE | LOGISTIQUE | COMMUNICATION | GENERAL
+  dueDate   DateTime?
+  done      Boolean   @default(false)
+  doneAt    DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
 }
 
 // A person attached to an event: co-organiser, volunteer… The record can exist

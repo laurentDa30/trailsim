@@ -41,9 +41,28 @@ export default async function DashboardPage() {
           resultSnapshot: true,
         },
       },
+      tasks: {
+        where: { done: false },
+        select: { dueDate: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   })
+
+  // Reminders: overdue + due within 14 days, per event (open tasks only).
+  const now = Date.now()
+  const taskAlerts = new Map<string, { overdue: number; upcoming: number }>()
+  for (const e of events) {
+    let overdue = 0
+    let upcoming = 0
+    for (const t of e.tasks) {
+      if (!t.dueDate) continue
+      const diff = new Date(t.dueDate).getTime() - now
+      if (diff < 0) overdue++
+      else if (diff <= 14 * 86400_000) upcoming++
+    }
+    if (overdue + upcoming > 0) taskAlerts.set(e.id, { overdue, upcoming })
+  }
 
   // Compute stats
   const totalRaces = events.reduce((sum, e) => sum + e.races.length, 0)
@@ -197,6 +216,7 @@ export default async function DashboardPage() {
                 name={event.name}
                 date={event.date}
                 location={event.location}
+                taskAlert={taskAlerts.get(event.id) ?? null}
                 races={event.races}
                 totalRunners={event.simulations[0]?.totalRunners ?? 0}
                 latestSimulation={

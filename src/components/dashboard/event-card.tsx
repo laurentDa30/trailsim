@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Calendar, MapPin, Settings, BarChart2, Users, Trash2 } from "lucide-react"
+import { Calendar, MapPin, Settings, BarChart2, Users, Trash2, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type SimulationStatus = "PENDING" | "RUNNING" | "DONE" | "ERROR"
@@ -33,6 +33,8 @@ interface EventCardProps {
   totalRunners: number
   latestSimulation?: Simulation | null
   status?: SimulationStatus
+  /** Open-task reminders: overdue + due within 14 days (null = nothing due). */
+  taskAlert?: { overdue: number; upcoming: number } | null
 }
 
 function StatusBadge({ status }: { status: SimulationStatus }) {
@@ -208,6 +210,7 @@ export function EventCard({
   races,
   totalRunners,
   latestSimulation,
+  taskAlert,
 }: EventCardProps) {
   const router = useRouter()
   const simStatus: SimulationStatus = latestSimulation?.status ?? "PENDING"
@@ -313,6 +316,29 @@ export function EventCard({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Task reminders */}
+      {taskAlert && (
+        <Link
+          href={`/events/${id}/taches`}
+          className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5"
+          style={{
+            color: taskAlert.overdue > 0 ? "var(--color-danger)" : "var(--color-warning)",
+            backgroundColor:
+              taskAlert.overdue > 0
+                ? "color-mix(in srgb, var(--color-danger) 8%, transparent)"
+                : "color-mix(in srgb, var(--color-warning) 10%, transparent)",
+            border: `1px solid color-mix(in srgb, ${
+              taskAlert.overdue > 0 ? "var(--color-danger)" : "var(--color-warning)"
+            } 25%, transparent)`,
+          }}
+        >
+          <AlertTriangle size={12} />
+          {taskAlert.overdue > 0 && `${taskAlert.overdue} tâche${taskAlert.overdue > 1 ? "s" : ""} en retard`}
+          {taskAlert.overdue > 0 && taskAlert.upcoming > 0 && " · "}
+          {taskAlert.upcoming > 0 && `${taskAlert.upcoming} sous 14 j`}
+        </Link>
       )}
 
       {/* Runners total */}
