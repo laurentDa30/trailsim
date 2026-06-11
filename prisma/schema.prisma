@@ -82,6 +82,10 @@ model Task {
   dueDate   DateTime?
   done      Boolean   @default(false)
   doneAt    DateTime?
+  // Sub-task support: a task can belong to a parent task (one level expected).
+  parentId  String?
+  parent    Task?     @relation("SubTasks", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Task[]    @relation("SubTasks")
   note      String?
   createdAt DateTime  @default(now())
 }

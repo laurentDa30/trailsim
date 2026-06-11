@@ -9,6 +9,8 @@ import {
   AlertTriangleIcon,
   CalendarIcon,
   SparklesIcon,
+  PencilIcon,
+  ListPlusIcon,
 } from 'lucide-react'
 
 interface Task {
@@ -17,6 +19,7 @@ interface Task {
   category: string
   dueDate: string | null
   done: boolean
+  parentId: string | null
   note: string | null
 }
 
@@ -66,12 +69,14 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
   const [due, setDue] = useState('')
   const [busy, setBusy] = useState(false)
 
+  // Status groups hold top-level tasks only; sub-tasks render under their parent.
   const groups = useMemo(() => {
     const overdue: Task[] = []
     const upcoming: Task[] = []
     const noDate: Task[] = []
     const doneList: Task[] = []
     for (const t of tasks) {
+      if (t.parentId) continue
       if (t.done) doneList.push(t)
       else if (!t.dueDate) noDate.push(t)
       else if (daysUntil(t.dueDate) < 0) overdue.push(t)
@@ -79,6 +84,26 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
     }
     return { overdue, upcoming, noDate, doneList }
   }, [tasks])
+
+  const childrenOf = useMemo(() => {
+    const map = new Map<string, Task[]>()
+    for (const t of tasks) {
+      if (!t.parentId) continue
+      if (!map.has(t.parentId)) map.set(t.parentId, [])
+      map.get(t.parentId)!.push(t)
+    }
+    return map
+  }, [tasks])
+
+  // Inline edit state (one task at a time)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [eTitle, setETitle] = useState('')
+  const [eCategory, setECategory] = useState('GENERAL')
+  const [eDue, setEDue] = useState('')
+
+  // Quick "add sub-task" state (one parent at a time)
+  const [subFor, setSubFor] = useState<string | null>(null)
+  const [subTitle, setSubTitle] = useState('')
 
   async function addTask(e: React.FormEvent) {
     e.preventDefault()
@@ -130,20 +155,132 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
   }
 
   async function removeTask(id: string) {
-    if (!confirm('Supprimer cette tâche ?')) return
-    setTasks((prev) => prev.filter((t) => t.id !== id))
+    if (!confirm('Supprimer cette tâche (et ses sous-tâches) ?')) return
+    setTasks((prev) => prev.filter((t) => t.id !== id && t.parentId !== id))
     await fetch(`/api/events/${event.id}/tasks/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
-  function Row({ t }: { t: Task }) {
+  function startEdit(t: Task) {
+    setEditingId(t.id)
+    setETitle(t.title)
+    setECategory(t.category)
+    setEDue(t.dueDate ? t.dueDate.slice(0, 10) : '')
+  }
+
+  async function saveEdit() {
+    if (!editingId || !eTitle.trim()) return
+    const dueIso = eDue ? new Date(`${eDue}T12:00:00`).toISOString() : null
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === editingId ? { ...t, title: eTitle.trim(), category: eCategory, dueDate: dueIso } : t
+      )
+    )
+    const id = editingId
+    setEditingId(null)
+    await fetch(`/api/events/${event.id}/tasks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: eTitle.trim(), category: eCategory, dueDate: dueIso }),
+    }).catch(() => {})
+  }
+
+  async function addSubTask(parent: Task) {
+    if (!subTitle.trim() || busy) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/events/${event.id}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: subTitle.trim(), category: parent.category, parentId: parent.id }),
+      })
+      if (res.ok) {
+        const t = (await res.json()) as Task
+        setTasks((prev) => [...prev, t])
+        setSubTitle('')
+        setSubFor(null)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function Row({ t, depth = 0 }: { t: Task; depth?: number }) {
     const cat = catOf(t.category)
     const d = t.dueDate ? daysUntil(t.dueDate) : null
     const late = !t.done && d != null && d < 0
     const soon = !t.done && d != null && d >= 0 && d <= 14
+    const kids = childrenOf.get(t.id) ?? []
+
+    if (editingId === t.id) {
+      return (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-lg px-3 py-2"
+          style={{
+            marginLeft: depth * 22,
+            background: 'var(--color-bg-2)',
+            border: '1px solid color-mix(in oklab, var(--color-lime) 40%, var(--color-line))',
+          }}
+        >
+          <input
+            value={eTitle}
+            onChange={(e) => setETitle(e.target.value)}
+            autoFocus
+            className="flex-1 min-w-[160px] px-2 py-1 rounded text-xs"
+            style={inputStyle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveEdit()
+              if (e.key === 'Escape') setEditingId(null)
+            }}
+          />
+          <select
+            value={eCategory}
+            onChange={(e) => setECategory(e.target.value)}
+            className="px-1.5 py-1 rounded text-[11px]"
+            style={inputStyle}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={eDue}
+            onChange={(e) => setEDue(e.target.value)}
+            className="px-1.5 py-1 rounded text-[11px]"
+            style={inputStyle}
+          />
+          <button
+            type="button"
+            onClick={saveEdit}
+            className="px-2.5 py-1 rounded text-[11px] font-medium"
+            style={{
+              background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)',
+              color: 'var(--color-lime)',
+              border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
+            }}
+          >
+            OK
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditingId(null)}
+            className="px-2 py-1 rounded text-[11px]"
+            style={{ color: 'var(--color-ink-4)' }}
+          >
+            Annuler
+          </button>
+        </div>
+      )
+    }
+
     return (
+      <>
       <div
         className="flex items-center gap-2.5 rounded-lg px-3 py-2"
         style={{
+          marginLeft: depth * 22,
           background: 'var(--color-bg-2)',
           border: `1px solid ${late ? 'color-mix(in oklab, var(--color-danger, #DC2626) 40%, var(--color-line))' : 'var(--color-line)'}`,
           opacity: t.done ? 0.55 : 1,
@@ -195,17 +332,86 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
           </div>
         </div>
         {canEdit && (
-          <button
-            type="button"
-            onClick={() => removeTask(t.id)}
-            aria-label="Supprimer"
-            className="p-1 rounded shrink-0"
-            style={{ color: 'var(--color-danger, #DC2626)' }}
-          >
-            <Trash2Icon size={13} />
-          </button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {depth === 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSubFor((cur) => (cur === t.id ? null : t.id))
+                  setSubTitle('')
+                }}
+                title="Ajouter une sous-tâche"
+                aria-label="Ajouter une sous-tâche"
+                className="p-1 rounded"
+                style={{ color: 'var(--color-ink-4)' }}
+              >
+                <ListPlusIcon size={13} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => startEdit(t)}
+              title="Modifier"
+              aria-label="Modifier"
+              className="p-1 rounded"
+              style={{ color: 'var(--color-ink-4)' }}
+            >
+              <PencilIcon size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => removeTask(t.id)}
+              aria-label="Supprimer"
+              className="p-1 rounded"
+              style={{ color: 'var(--color-danger, #DC2626)' }}
+            >
+              <Trash2Icon size={13} />
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Quick sub-task input */}
+      {subFor === t.id && canEdit && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            addSubTask(t)
+          }}
+          className="flex gap-2"
+          style={{ marginLeft: (depth + 1) * 22 }}
+        >
+          <input
+            value={subTitle}
+            onChange={(e) => setSubTitle(e.target.value)}
+            autoFocus
+            placeholder="Sous-tâche…"
+            className="flex-1 px-2.5 py-1.5 rounded-md text-xs"
+            style={inputStyle}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setSubFor(null)
+            }}
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium"
+            style={{
+              background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)',
+              color: 'var(--color-lime)',
+              border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
+            }}
+          >
+            Ajouter
+          </button>
+        </form>
+      )}
+
+      {/* Sub-tasks, indented under their parent */}
+      {kids.map((k) => (
+        <Row key={k.id} t={k} depth={depth + 1} />
+      ))}
+      </>
     )
   }
 

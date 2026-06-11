@@ -383,12 +383,10 @@ export function EventCard({
           Config
         </Link>
 
+        {/* Always open the simulation HISTORY — the list links to each result,
+            so the latest run stays one click away without hiding the others. */}
         <Link
-          href={
-            latestSimulation
-              ? `/events/${id}/results/${latestSimulation.id}`
-              : `/events/${id}/results`
-          }
+          href={`/events/${id}/results`}
           className={cn(
             "flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium flex-1 justify-center transition-all duration-150"
           )}

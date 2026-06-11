@@ -41,6 +41,7 @@ export default async function TachesPage({ params }: PageProps) {
         category: t.category,
         dueDate: t.dueDate ? t.dueDate.toISOString() : null,
         done: t.done,
+        parentId: t.parentId,
         note: t.note,
       }))}
       canEdit={canManage(access)}

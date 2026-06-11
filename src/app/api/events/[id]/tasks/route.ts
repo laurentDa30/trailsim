@@ -9,6 +9,7 @@ const TaskCreateSchema = z.object({
     .enum(["ADMINISTRATIF", "SECURITE", "LOGISTIQUE", "COMMUNICATION", "GENERAL"])
     .default("GENERAL"),
   dueDate: z.string().datetime().nullable().optional(),
+  parentId: z.string().nullable().optional(),
   note: z.string().max(1000).nullable().optional(),
 })
 
@@ -50,12 +51,23 @@ export async function POST(
     if (!parsed.success) {
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
+    // A sub-task's parent must belong to the same event (and stay one level deep).
+    let parentId: string | null = null
+    if (parsed.data.parentId) {
+      const parent = await db.task.findUnique({ where: { id: parsed.data.parentId } })
+      if (!parent || parent.eventId !== id) {
+        return Response.json({ error: "Parent task not found" }, { status: 400 })
+      }
+      parentId = parent.parentId ?? parent.id
+    }
+
     const task = await db.task.create({
       data: {
         eventId: id,
         title: parsed.data.title,
         category: parsed.data.category,
         dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+        parentId,
         note: parsed.data.note ?? null,
       },
     })
