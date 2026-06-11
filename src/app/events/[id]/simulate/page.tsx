@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import db from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
+import { applyTraceSnapshot } from '@/lib/sim-snapshot'
 import { SimulateRunner } from './simulate-runner'
 
 interface PageProps {
@@ -41,7 +42,9 @@ export default async function SimulatePage({ params }: PageProps) {
     redirect(`/events/${id}/setup`)
   }
 
-  const races = event.races.map((r) => ({
+  // Re-running an existing simulation must compute on the trace it was created
+  // with, not a trace re-uploaded since.
+  const races = applyTraceSnapshot(event.races, simulation.gpxSnapshot).map((r) => ({
     id: r.id,
     name: r.name,
     color: r.color,

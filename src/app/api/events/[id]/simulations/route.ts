@@ -64,14 +64,26 @@ export async function POST(
 
     const { name, totalRunners, temperature, wind, windDirection, rain, rainIntensity, fog, jamThreshold, affluenceThreshold, nRuns, ressources, logistique, peloton, runnerProfiles } = parsed.data
 
-    // Snapshot the courses' départs as they are right now, so the history keeps
-    // the start offsets this run used even if race.startTime is changed later.
+    // Snapshot the courses as they are right now: départs (for the history) and
+    // traces + segments (results pages must render the geometry THIS run used,
+    // even if a GPX is re-uploaded later — positions are fractions of the trace).
     const racesNow = await db.race.findMany({
       where: { eventId: id },
       orderBy: { startTime: "asc" },
-      select: { id: true, name: true, distance: true, startTime: true, color: true },
+      include: { segments: true },
     })
-    const racesSnapshot = JSON.stringify(racesNow)
+    const racesSnapshot = JSON.stringify(
+      racesNow.map((r) => ({
+        id: r.id,
+        name: r.name,
+        distance: r.distance,
+        startTime: r.startTime,
+        color: r.color,
+      }))
+    )
+    const gpxSnapshot = JSON.stringify(
+      racesNow.map((r) => ({ id: r.id, gpxPoints: r.gpxPoints, segments: r.segments }))
+    )
 
     const simulation = await db.simulation.create({
       data: {
@@ -88,6 +100,7 @@ export async function POST(
         affluenceThreshold,
         nRuns,
         racesSnapshot,
+        gpxSnapshot,
         ...(ressources !== undefined && { ressources }),
         ...(logistique !== undefined && { logistique }),
         ...(peloton !== undefined && { peloton }),

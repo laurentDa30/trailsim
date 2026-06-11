@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
 import { CompressedSimulationResult } from '@/engine/types'
 import type { GPXPoint } from '@/engine/types'
+import { applyTraceSnapshot } from '@/lib/sim-snapshot'
 import { ResultsView } from './results-view'
 
 interface PageProps {
@@ -32,7 +33,10 @@ export default async function ResultsPage({ params }: PageProps) {
     redirect(`/events/${id}/simulate`)
   }
 
-  const races = await db.race.findMany({ where: { eventId: id }, include: { segments: true } })
+  const races = applyTraceSnapshot(
+    await db.race.findMany({ where: { eventId: id }, include: { segments: true } }),
+    simulation.gpxSnapshot
+  )
 
   // Parse resultSnapshot
   let result: CompressedSimulationResult | null = null

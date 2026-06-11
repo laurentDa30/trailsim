@@ -3,6 +3,7 @@ import db from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
+import { applyTraceSnapshot } from '@/lib/sim-snapshot'
 import {
   clusterRiskZones,
   clusterCollisionWindows,
@@ -70,10 +71,13 @@ export default async function ReportPage({ params }: PageProps) {
   const session = await auth()
   if (!session?.user?.id || !canRead(await getEventAccess(session.user.id, sim.eventId))) notFound()
 
-  const races = await db.race.findMany({
-    where: { eventId: id },
-    include: { segments: true },
-  })
+  const races = applyTraceSnapshot(
+    await db.race.findMany({
+      where: { eventId: id },
+      include: { segments: true },
+    }),
+    sim.gpxSnapshot
+  )
 
   let result: CompressedSimulationResult | null = null
   if (sim.resultSnapshot) {

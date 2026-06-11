@@ -194,6 +194,11 @@ model Simulation {
   // so the history shows the start offsets THIS run actually used, even if the
   // race.startTime is edited afterwards.
   racesSnapshot  String?
+  // Snapshot of each course's trace + segments at launch (JSON:
+  // [{id, gpxPoints, segments}]). Runner positions are stored as fractions of
+  // the trace, so results/report/terrain must render the geometry THIS run
+  // used — not the live Race row, which may have been re-uploaded since.
+  gpxSnapshot    String?
   ressources     String          @default("{\"effectifTotal\":45,\"barrieres\":20}")
   runnerProfiles RunnerProfile[]
 }
