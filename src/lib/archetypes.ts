@@ -11,16 +11,23 @@
 // of the two courses' speed-band distribution, rounded to 100 %.
 //   Élite 1 · Confirmé 9 · Intermédiaire 39 · Débutant 42 · Marcheur 9
 // Organisers can still adjust per race in step 2; saved configs keep their own.
-// Abandon rates are tuned to half the raw observed DNF rate (calib v3), and the
-// Marcheur floor speed is 5 km/h (a sustained fast-walk minimum).
+//
+// Speed bands (calib v4) are FLAT base speeds, not observed race speeds: the
+// engine multiplies them by slope (Tobler) + fatigue, ≈ ×0.80–0.83 on the
+// reference 20 km. v3 wrongly used observed average race speeds as flat bases,
+// double-counting that penalty — the median finished ~40 min late and the last
+// ~1 h late. v4 bands = real quantile speeds (322 finishers, 20 km) divided by
+// the engine multiplier, so simulated quantiles match reality:
+//   p0 1h31→1h31 · p10 2h00→1h59 · p50 2h26→2h26 · p90 3h06→3h01 · last 3h53→4h00
+// Abandon rates stay tuned to half the raw observed DNF rate.
 export const DEFAULT_ARCHETYPES = [
   {
     id: 'elite',
     label: 'Élite',
     color: '#7CB518',
     percentage: 1,
-    speedMin: 13,
-    speedMax: 18,
+    speedMin: 14.5,
+    speedMax: 17,
     fatiguePlancher: 80,
     techLevel: 95,
     ravito: 30,
@@ -31,8 +38,8 @@ export const DEFAULT_ARCHETYPES = [
     label: 'Confirmé',
     color: '#38BDF8',
     percentage: 9,
-    speedMin: 10,
-    speedMax: 13,
+    speedMin: 12.5,
+    speedMax: 14.5,
     fatiguePlancher: 70,
     techLevel: 75,
     ravito: 60,
@@ -43,8 +50,8 @@ export const DEFAULT_ARCHETYPES = [
     label: 'Intermédiaire',
     color: '#FBBF24',
     percentage: 39,
-    speedMin: 8,
-    speedMax: 11,
+    speedMin: 10,
+    speedMax: 12.5,
     fatiguePlancher: 60,
     techLevel: 55,
     ravito: 90,
@@ -55,8 +62,8 @@ export const DEFAULT_ARCHETYPES = [
     label: 'Débutant',
     color: '#F472B6',
     percentage: 42,
-    speedMin: 6,
-    speedMax: 8,
+    speedMin: 8,
+    speedMax: 10,
     fatiguePlancher: 50,
     techLevel: 40,
     ravito: 120,
@@ -67,8 +74,8 @@ export const DEFAULT_ARCHETYPES = [
     label: 'Marcheur',
     color: '#A78BFA',
     percentage: 9,
-    speedMin: 5,
-    speedMax: 6,
+    speedMin: 6,
+    speedMax: 8,
     fatiguePlancher: 40,
     techLevel: 25,
     ravito: 180,
@@ -91,7 +98,7 @@ export type PelotonConfigs = Record<string, RaceConfig>
  * is refreshed once to the new tuning (keeping the organiser's distribution),
  * so central recalibrations apply automatically without manual slider edits.
  */
-export const PELOTON_CALIB_VERSION = 3
+export const PELOTON_CALIB_VERSION = 4
 
 /**
  * Re-apply the current DEFAULT_ARCHETYPES tuning (speeds + physical params) to
