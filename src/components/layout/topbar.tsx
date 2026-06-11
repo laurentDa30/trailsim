@@ -175,7 +175,7 @@ export function Topbar({
       <div className="relative shrink-0" ref={menuRef}>
         <button
           onClick={() => setMenuOpen((v) => !v)}
-          className="flex items-center justify-center text-[11px] font-bold"
+          className="flex items-center justify-center text-[11px] font-bold cursor-pointer"
           style={{
             width: 30,
             height: 30,
