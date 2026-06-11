@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon } from 'lucide-react'
+import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon, LogOut } from 'lucide-react'
+import { signOut } from 'next-auth/react'
+import { useState, useRef, useEffect } from 'react'
 import { PageNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
 
@@ -38,6 +40,16 @@ export function Topbar({
   userInitials = 'OR',
 }: TopbarProps) {
   const st = status ? STATUS[status] : null
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    if (menuOpen) document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [menuOpen])
 
   return (
     <header
@@ -159,19 +171,45 @@ export function Topbar({
         <Share2Icon size={15} />
       </button>
 
-      {/* Avatar */}
-      <div
-        className="flex items-center justify-center shrink-0 text-[11px] font-bold"
-        style={{
-          width: 30,
-          height: 30,
-          borderRadius: '50%',
-          background: 'color-mix(in oklab, var(--color-lime) 20%, var(--color-bg-2))',
-          color: 'var(--color-lime)',
-        }}
-        aria-label="Compte"
-      >
-        {userInitials}
+      {/* Avatar + dropdown */}
+      <div className="relative shrink-0" ref={menuRef}>
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          className="flex items-center justify-center text-[11px] font-bold"
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            background: 'color-mix(in oklab, var(--color-lime) 20%, var(--color-bg-2))',
+            color: 'var(--color-lime)',
+          }}
+          aria-label="Compte"
+          aria-expanded={menuOpen}
+        >
+          {userInitials}
+        </button>
+
+        {menuOpen && (
+          <div
+            className="absolute right-0 top-full mt-2 w-44 rounded-lg overflow-hidden z-50"
+            style={{
+              background: 'var(--color-bg-1)',
+              border: '1px solid var(--color-line)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+            }}
+          >
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors"
+              style={{ color: 'var(--color-ink-2)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-2)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <LogOut size={14} style={{ color: 'var(--color-ink-4)' }} />
+              Se déconnecter
+            </button>
+          </div>
+        )}
       </div>
     </header>
   )
