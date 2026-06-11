@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Calendar, MapPin, Settings, BarChart2, Users, Trash2, AlertTriangle } from "lucide-react"
+import { Calendar, MapPin, Play, BarChart2, Users, ClipboardList, Trash2, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type SimulationStatus = "PENDING" | "RUNNING" | "DONE" | "ERROR"
@@ -367,39 +367,42 @@ export function EventCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-0.5">
-        <Link
-          href={`/events/${id}/setup`}
-          className={cn(
-            "flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium flex-1 justify-center transition-all duration-150",
-            "border hover:opacity-80"
-          )}
-          style={{
-            backgroundColor: "var(--color-bg-2)",
-            borderColor: "var(--color-line)",
-            color: "var(--color-ink-3)",
-          }}
-        >
-          <Settings size={12} />
-          Config
-        </Link>
-
-        {/* Always open the simulation HISTORY — the list links to each result,
-            so the latest run stays one click away without hiding the others. */}
-        <Link
-          href={`/events/${id}/results`}
-          className={cn(
-            "flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium flex-1 justify-center transition-all duration-150"
-          )}
-          style={{
-            backgroundColor:
-              "color-mix(in srgb, var(--color-lime) 10%, transparent)",
-            border: "1px solid color-mix(in srgb, var(--color-lime) 20%, transparent)",
-            color: "var(--color-lime)",
-          }}
-        >
-          <BarChart2 size={12} />
-          Résultats →
-        </Link>
+        {[
+          { href: `/events/${id}/simulate`, icon: Play,          label: "Simuler",   highlight: false },
+          { href: `/events/${id}/equipe`,   icon: Users,         label: "Équipe",    highlight: false },
+          { href: `/events/${id}/taches`,   icon: ClipboardList, label: "Tâches",    highlight: false },
+          { href: `/events/${id}/results`,  icon: BarChart2,     label: "Résultats", highlight: true  },
+        ].map(({ href, icon: Icon, label, highlight }) => (
+          <Link
+            key={href}
+            href={href}
+            className="group relative flex items-center justify-center flex-1 rounded-lg transition-all duration-150 hover:opacity-80"
+            style={{
+              height: 34,
+              backgroundColor: highlight
+                ? "color-mix(in srgb, var(--color-lime) 10%, transparent)"
+                : "var(--color-bg-2)",
+              border: `1px solid ${highlight
+                ? "color-mix(in srgb, var(--color-lime) 20%, transparent)"
+                : "var(--color-line)"}`,
+              color: highlight ? "var(--color-lime)" : "var(--color-ink-3)",
+            }}
+            aria-label={label}
+          >
+            <Icon size={15} />
+            <span
+              className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50"
+              style={{
+                backgroundColor: "var(--color-bg-1)",
+                border: "1px solid var(--color-line)",
+                color: "var(--color-ink-2)",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+              }}
+            >
+              {label}
+            </span>
+          </Link>
+        ))}
       </div>
     </div>
   )
