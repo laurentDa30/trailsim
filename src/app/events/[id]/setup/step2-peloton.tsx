@@ -1,11 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronRightIcon, SlidersHorizontalIcon } from 'lucide-react'
+import { ChevronRightIcon, SlidersHorizontalIcon, UploadIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import type { Race } from '@prisma/client'
+import type { GPXPoint } from '@/engine/types'
 import type { RunnerProfile } from '@/lib/validators/simulation'
+import {
+  parseResultTimes,
+  deriveCalibration,
+  fmtDuration,
+  type CalibrationProposal,
+} from '@/lib/results-import'
 import {
   DEFAULT_ARCHETYPES,
   PELOTON_CALIB_VERSION,
@@ -118,6 +125,11 @@ export function archetypesToPeloton(configs: Record<string, RaceConfig>): Peloto
 export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) {
   const [activeTab, setActiveTab] = useState(0)
   const [expandedArchetypes, setExpandedArchetypes] = useState<Record<string, boolean>>({})
+  // Calibration from real results (per active race)
+  const [calibOpen, setCalibOpen] = useState(false)
+  const [calibText, setCalibText] = useState('')
+  const [calibError, setCalibError] = useState<string | null>(null)
+  const [calibProposal, setCalibProposal] = useState<CalibrationProposal | null>(null)
 
   const defaultConfig = (): RaceConfig => ({
     totalRunners: 100,
@@ -165,6 +177,67 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
         },
       }
     })
+  }
+
+  function resetCalib() {
+    setCalibOpen(false)
+    setCalibText('')
+    setCalibError(null)
+    setCalibProposal(null)
+  }
+
+  // Parse a results file/paste and propose an archetype distribution that
+  // reproduces the real finish-time distribution on this course.
+  function runCalibration(text: string) {
+    setCalibError(null)
+    setCalibProposal(null)
+    if (!activeRace) return
+    const { times } = parseResultTimes(text)
+    if (times.length < 5) {
+      setCalibError(
+        "Aucun temps d'arrivée détecté (minimum 5). Formats acceptés : export du chronométreur (.xls/HTML), CSV, ou un temps hh:mm:ss par ligne."
+      )
+      return
+    }
+    let gpx: GPXPoint[] = []
+    try {
+      gpx = JSON.parse(activeRace.gpxPoints) as GPXPoint[]
+    } catch {
+      gpx = []
+    }
+    const distanceKm =
+      gpx.length > 1 ? gpx[gpx.length - 1].dist : activeRace.distance
+    const proposal = deriveCalibration(
+      times,
+      distanceKm,
+      gpx.length > 1 ? gpx : undefined
+    )
+    if (!proposal) {
+      setCalibError(
+        'Distance de la course inconnue — importez d’abord la trace GPX à l’étape 1.'
+      )
+      return
+    }
+    setCalibProposal(proposal)
+  }
+
+  function applyCalibration() {
+    if (!calibProposal || !activeRace) return
+    const pct = calibProposal.percentages
+    setConfigs((prev) => {
+      const cfg = prev[activeRace.id] ?? defaultConfig()
+      return {
+        ...prev,
+        [activeRace.id]: {
+          ...cfg,
+          archetypes: cfg.archetypes.map((a) => ({
+            ...a,
+            percentage: pct[a.id] ?? 0,
+          })),
+        },
+      }
+    })
+    resetCalib()
   }
 
   // Restore the default archetype set (distribution + physical params from the
@@ -217,7 +290,10 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
         {races.map((race, i) => (
           <button
             key={race.id}
-            onClick={() => setActiveTab(i)}
+            onClick={() => {
+              setActiveTab(i)
+              resetCalib()
+            }}
             className={cn(
               'px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px',
               activeTab === i
@@ -299,6 +375,14 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
                           : `Total: ${total}% — ajustez (${diff > 0 ? '+' : ''}${diff}%)`}
                       </span>
                       <button
+                        onClick={() => setCalibOpen((v) => !v)}
+                        title="Caler la répartition sur les résultats réels d'une édition précédente"
+                        className="flex items-center gap-1 text-xs text-[var(--color-ink-3)] hover:underline"
+                      >
+                        <UploadIcon size={11} />
+                        Calibrer (résultats réels)
+                      </button>
+                      <button
                         onClick={() => resetArchetypes(activeRace.id)}
                         title="Restaurer la répartition et les paramètres physiques par défaut"
                         className="text-xs text-[var(--color-ink-3)] hover:underline"
@@ -315,6 +399,109 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
                   )
                 })()}
               </div>
+
+              {calibOpen && (
+                <div className="px-4 py-3 border-b border-[var(--color-line)] bg-[var(--color-bg-2)] space-y-3">
+                  <p className="text-xs leading-relaxed text-[var(--color-ink-3)]">
+                    Importez les résultats réels d&apos;une édition précédente de{' '}
+                    <b className="text-[var(--color-ink-2)]">{activeRace.name}</b> : la
+                    répartition des archétypes sera calée pour reproduire la distribution
+                    des arrivées sur cette trace. Formats acceptés : export du
+                    chronométreur (.xls / HTML), CSV, ou une liste de temps collée
+                    (un hh:mm:ss par ligne).
+                  </p>
+                  <div className="flex items-start gap-3 flex-wrap">
+                    <label
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors border border-[var(--color-line)] bg-[var(--color-bg-1)] text-[var(--color-ink-2)] hover:border-[var(--color-lime)]"
+                    >
+                      <UploadIcon size={12} />
+                      Choisir un fichier
+                      <input
+                        type="file"
+                        accept=".xls,.xlsx,.csv,.txt,.html,.htm"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0]
+                          if (f) runCalibration(await f.text())
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                    <span className="text-xs text-[var(--color-ink-4)] py-1.5">ou</span>
+                    <div className="flex-1 min-w-[220px] flex items-start gap-2">
+                      <textarea
+                        value={calibText}
+                        onChange={(e) => setCalibText(e.target.value)}
+                        placeholder={'1:31:36\n1:33:48\n…'}
+                        rows={2}
+                        className="flex-1 text-xs font-mono rounded-lg px-2.5 py-1.5 resize-y border border-[var(--color-line)] bg-[var(--color-bg-1)] text-[var(--color-ink-2)] placeholder:text-[var(--color-ink-4)] focus:outline-none focus:border-[var(--color-lime)]"
+                      />
+                      <button
+                        onClick={() => runCalibration(calibText)}
+                        disabled={calibText.trim().length === 0}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[var(--color-line)] bg-[var(--color-bg-1)] text-[var(--color-ink-2)] disabled:opacity-40 hover:border-[var(--color-lime)] transition-colors"
+                      >
+                        Analyser
+                      </button>
+                    </div>
+                  </div>
+                  {calibError && (
+                    <p className="text-xs text-[var(--color-danger)]">{calibError}</p>
+                  )}
+                  {calibProposal && (
+                    <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-1)] p-3 space-y-2.5">
+                      <p className="text-xs text-[var(--color-ink-2)]">
+                        <b className="tabular-nums">{calibProposal.n}</b> arrivants détectés
+                        sur <b className="tabular-nums">{calibProposal.distanceKm.toFixed(1)} km</b>{' '}
+                        — 1er <b>{fmtDuration(calibProposal.firstSec)}</b> · médiane{' '}
+                        <b>{fmtDuration(calibProposal.medianSec)}</b> · dernier{' '}
+                        <b>{fmtDuration(calibProposal.lastSec)}</b>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {config.archetypes
+                          .filter((a) => (calibProposal.percentages[a.id] ?? 0) > 0)
+                          .map((a) => (
+                            <span
+                              key={a.id}
+                              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs border border-[var(--color-line)] bg-[var(--color-bg-2)] text-[var(--color-ink-2)]"
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: a.color }}
+                              />
+                              {a.label}{' '}
+                              <b className="tabular-nums">
+                                {calibProposal.percentages[a.id]}%
+                              </b>
+                            </span>
+                          ))}
+                      </div>
+                      <p className="text-[11px] text-[var(--color-ink-4)]">
+                        Médiane simulée attendue avec cette répartition ≈{' '}
+                        <b className="text-[var(--color-ink-3)]">
+                          {fmtDuration(calibProposal.predictedMedianSec)}
+                        </b>{' '}
+                        (réel : {fmtDuration(calibProposal.medianSec)})
+                      </p>
+                      <div className="flex items-center gap-3 pt-0.5">
+                        <button
+                          onClick={applyCalibration}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                          style={{ background: 'var(--color-lime)', color: '#1a1a10' }}
+                        >
+                          Appliquer au peloton
+                        </button>
+                        <button
+                          onClick={resetCalib}
+                          className="text-xs text-[var(--color-ink-3)] hover:underline"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <table className="w-full text-sm">
                 <thead>
