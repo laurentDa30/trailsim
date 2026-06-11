@@ -368,7 +368,7 @@ export function EventCard({
       {/* Actions */}
       <div className="flex items-center gap-2 pt-0.5">
         {[
-          { href: `/events/${id}/simulate`, icon: Play,          label: "Simuler",   highlight: false },
+          { href: `/events/${id}/setup`,    icon: Play,          label: "Simuler",   highlight: false },
           { href: `/events/${id}/equipe`,   icon: Users,         label: "Équipe",    highlight: false },
           { href: `/events/${id}/taches`,   icon: ClipboardList, label: "Tâches",    highlight: false },
           { href: `/events/${id}/results`,  icon: BarChart2,     label: "Résultats", highlight: true  },
