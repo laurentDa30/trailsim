@@ -12,7 +12,7 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import 'leaflet/dist/leaflet.css'
 import type { GPXPoint, RiskMapEntry } from '@/engine/types'
 import { logiTypeOf, logiDisplayName, type PlacedLogi } from './logistics'
@@ -278,6 +278,22 @@ function decimateTrack(track: GPXPoint[], maxPts = 400): GPXPoint[] {
   return result
 }
 
+/** Captures the Leaflet map instance so external controls can call zoomIn/zoomOut. */
+function MapCapture({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap()
+  useEffect(() => { mapRef.current = map }, [map, mapRef])
+  return null
+}
+
+type TileMode = 'standard' | 'satellite' | 'hybrid'
+
+const TILES: Record<TileMode, { url: string; attribution: string }> = {
+  standard:  { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',  attribution: '© OpenStreetMap' },
+  satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles © Esri' },
+  hybrid:    { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles © Esri' },
+}
+const HYBRID_LABELS_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+
 export default function LeafletMap({
   races,
   riskMap,
@@ -309,6 +325,9 @@ export default function LeafletMap({
   const center: [number, number] = firstPoints
     ? [firstPoints[0].lat, firstPoints[0].lng]
     : [45.92, 6.87]
+
+  const mapRef = useRef<L.Map | null>(null)
+  const [tileMode, setTileMode] = useState<TileMode>('standard')
 
   const racesById = useMemo(() => new Map(races.map((r) => [r.id, r])), [races])
 
@@ -504,19 +523,18 @@ export default function LeafletMap({
   }, [collisionWindows, racesById])
 
   return (
-    <>
-      <style>{`html[data-theme="dark"] .leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }`}</style>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <style>{`html[data-theme="dark"] .leaflet-tile-pane { filter: ${tileMode === 'standard' ? 'invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%)' : 'none'}; }`}</style>
       <MapContainer
         center={center}
         zoom={12}
         style={{ width: '100%', height: '100%', background: '#14110f' }}
-        zoomControl={true}
+        zoomControl={false}
         preferCanvas={true}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="© OpenStreetMap"
-        />
+        <MapCapture mapRef={mapRef} />
+        <TileLayer url={TILES[tileMode].url} attribution={TILES[tileMode].attribution} />
+        {tileMode === 'hybrid' && <TileLayer url={HYBRID_LABELS_URL} attribution="" />}
 
         {/* Race polylines */}
         {races.map((race) => {
@@ -742,6 +760,76 @@ export default function LeafletMap({
           )
         })}
       </MapContainer>
-    </>
+
+      {/* ── Map UI overlay (zoom + tile switcher) ── */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1001 }}>
+
+        {/* Tile mode switcher — top right */}
+        <div
+          style={{
+            position: 'absolute', top: 12, right: 12,
+            pointerEvents: 'auto',
+            display: 'flex', gap: 2,
+            background: 'var(--color-bg-1)',
+            border: '1px solid var(--color-line)',
+            borderRadius: 8, padding: 2,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+          }}
+        >
+          {(['standard', 'satellite', 'hybrid'] as TileMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setTileMode(mode)}
+              style={{
+                padding: '4px 9px',
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.12s',
+                background: tileMode === mode
+                  ? 'color-mix(in srgb, var(--color-lime) 15%, transparent)'
+                  : 'transparent',
+                color: tileMode === mode ? 'var(--color-lime)' : 'var(--color-ink-3)',
+              }}
+            >
+              {mode === 'standard' ? 'Standard' : mode === 'satellite' ? 'Satellite' : 'Hybride'}
+            </button>
+          ))}
+        </div>
+
+        {/* Zoom controls — bottom right */}
+        <div
+          style={{
+            position: 'absolute', bottom: 28, right: 12,
+            pointerEvents: 'auto',
+            display: 'flex', flexDirection: 'column', gap: 2,
+          }}
+        >
+          {([{ label: '+', fn: () => mapRef.current?.zoomIn() }, { label: '−', fn: () => mapRef.current?.zoomOut() }]).map(({ label, fn }) => (
+            <button
+              key={label}
+              onClick={fn}
+              style={{
+                width: 32, height: 32,
+                borderRadius: 8,
+                background: 'var(--color-bg-1)',
+                border: '1px solid var(--color-line)',
+                color: 'var(--color-ink-2)',
+                fontSize: 20, fontWeight: 300,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                lineHeight: 1,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+      </div>
+    </div>
   )
 }
