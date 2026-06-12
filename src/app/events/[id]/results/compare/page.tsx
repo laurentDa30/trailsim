@@ -210,7 +210,8 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
         )}
 
         {ready && (
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--color-line)' }}>
+          <div className="overflow-x-auto">
+          <div className="rounded-xl overflow-hidden min-w-[360px]" style={{ border: '1px solid var(--color-line)' }}>
             <CompareHeader nameA={simA!.name} nameB={simB!.name} />
             <SectionLabel>Configuration</SectionLabel>
             {configRows.map((r) => (
@@ -238,6 +239,7 @@ export default async function ComparePage({ params, searchParams }: PageProps) {
                 })}
               </>
             )}
+          </div>
           </div>
         )}
       </main>

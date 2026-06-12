@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon, LogOut } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useState, useRef, useEffect } from 'react'
-import { PageNav } from './page-nav'
+import { PageNav, MobileNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
 
 type StatusKey = 'config' | 'sim' | 'results'
@@ -76,6 +76,9 @@ export function Topbar({
           Trail<b style={{ color: 'var(--color-lime)', fontWeight: 700 }}>Sim</b>
         </span>
       </Link>
+
+      {/* Mobile nav (hamburger) — replaces the centered PageNav below md */}
+      <MobileNav activePage={activePage} eventId={eventId} />
 
       {/* Event info — name with address beside it */}
       {eventName && (
@@ -158,7 +161,7 @@ export function Topbar({
       <button
         type="button"
         aria-label="Partager"
-        className="flex items-center justify-center transition-colors shrink-0"
+        className="hidden sm:flex items-center justify-center transition-colors shrink-0"
         style={{
           width: 32,
           height: 32,

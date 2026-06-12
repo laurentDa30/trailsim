@@ -506,8 +506,8 @@ export function ResultsView({
 
   return (
     <div
-      className="flex flex-col"
-      style={{ height: '100vh', background: 'var(--color-bg)', color: 'var(--color-ink)' }}
+      className="flex flex-col min-h-screen md:h-screen"
+      style={{ background: 'var(--color-bg)', color: 'var(--color-ink)' }}
     >
       {/* Topbar */}
       <Topbar
@@ -520,10 +520,10 @@ export function ResultsView({
       />
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
         {/* Left column: map + elevation profile */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex-1 relative min-h-0">
+          <div className="relative min-h-0 h-[55vh] md:h-auto md:flex-1">
             <LeafletMap
               races={races}
               riskMap={riskMap}
@@ -620,9 +620,8 @@ export function ResultsView({
 
         {/* Right panel */}
         <aside
-          className="shrink-0 overflow-y-auto border-l flex flex-col"
+          className="shrink-0 w-full md:w-[340px] md:overflow-y-auto border-t md:border-t-0 md:border-l flex flex-col"
           style={{
-            width: 340,
             background: 'var(--color-bg-1)',
             borderColor: 'var(--color-line)',
           }}

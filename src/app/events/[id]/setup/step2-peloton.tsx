@@ -286,7 +286,7 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-[var(--color-line)]">
+      <div className="flex flex-wrap items-center gap-1 border-b border-[var(--color-line)]">
         {races.map((race, i) => (
           <button
             key={race.id}
@@ -322,7 +322,7 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
       </div>
 
       {activeRace && config && (
-        <div className="grid grid-cols-[1fr_280px] gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-6">
           <div className="space-y-4">
             {/* Total runners */}
             <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg-1)] p-4">
@@ -503,7 +503,8 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
                 </div>
               )}
 
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[420px]">
                 <thead>
                   <tr className="border-b border-[var(--color-line)]">
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-[var(--color-ink-4)] w-8" />
@@ -665,6 +666,7 @@ export function Step2Peloton({ races, configs, setConfigs }: Step2PelotonProps) 
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
 

@@ -392,7 +392,7 @@ export function Step4Constraints({
           const p = bar(personnel, resources.effectif)
           const b = bar(barrages, resources.barrieres)
           return (
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
                 { label: 'Personnel déployé', used: personnel, total: resources.effectif, m: p },
                 { label: 'Barrages posés', used: barrages, total: resources.barrieres, m: b },

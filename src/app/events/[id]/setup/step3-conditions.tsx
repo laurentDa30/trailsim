@@ -143,7 +143,7 @@ export function Step3Conditions({ simulation, onUpdate }: Step3ConditionsProps) 
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         {/* Temperature card */}
         <div
           className="rounded-xl p-4 space-y-3"

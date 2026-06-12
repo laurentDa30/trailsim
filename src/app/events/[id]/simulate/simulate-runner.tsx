@@ -483,9 +483,9 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
           </div>
 
           {/* Two-column layout */}
-          <div className="flex gap-8 items-start">
+          <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
             {/* Left — ring + stats */}
-            <div className="shrink-0 flex flex-col items-center gap-5" style={{ width: 220 }}>
+            <div className="shrink-0 flex flex-col items-center gap-5 w-full max-w-[220px] md:w-[220px]">
               {/* Ring SVG */}
               <div className="relative">
                 <svg
@@ -590,7 +590,7 @@ export function SimulateRunner({ event, simulation, races }: SimulateRunnerProps
             </div>
 
             {/* Right — map + log */}
-            <div className="flex-1 min-w-0 space-y-5">
+            <div className="w-full flex-1 min-w-0 space-y-5">
               {/* Map section */}
               <div>
                 <p
