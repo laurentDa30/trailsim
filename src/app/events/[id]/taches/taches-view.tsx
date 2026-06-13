@@ -13,6 +13,9 @@ import {
   ListPlusIcon,
   UserIcon,
   WalletIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ListIcon,
 } from 'lucide-react'
 import {
   TASK_CATEGORIES,
@@ -76,12 +79,33 @@ function daysUntil(iso: string): number {
 // Pipeline display order.
 const STATUS_ORDER = ['EN_COURS', 'EN_ATTENTE', 'IMPOSSIBLE', 'VALIDE'] as const
 
+// ── Calendar date helpers ──
+const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+const MONTH_LABELS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+]
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Monday-based weekday index (0 = Monday … 6 = Sunday). */
+function mondayIndex(d: Date): number {
+  return (d.getDay() + 6) % 7
+}
+
 export function TachesView({ event, initialTasks, members, canEdit }: TachesViewProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('GENERAL')
   const [due, setDue] = useState('')
   const [busy, setBusy] = useState(false)
+  const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [calMonth, setCalMonth] = useState<Date>(() => {
+    const d = new Date()
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
 
   const memberName = useMemo(() => {
     const m = new Map<string, string>()
@@ -550,6 +574,161 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
     )
   }
 
+  function Calendar() {
+    // Tasks (parent + sub) grouped by their due day; undated listed separately.
+    const byDay = new Map<string, Task[]>()
+    const undated: Task[] = []
+    for (const t of tasks) {
+      if (!t.dueDate) {
+        if (t.status !== 'VALIDE') undated.push(t)
+        continue
+      }
+      const k = dayKey(new Date(t.dueDate))
+      if (!byDay.has(k)) byDay.set(k, [])
+      byDay.get(k)!.push(t)
+    }
+
+    const start = new Date(calMonth)
+    start.setDate(1 - mondayIndex(calMonth))
+    const cells: Date[] = []
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start)
+      d.setDate(start.getDate() + i)
+      cells.push(d)
+    }
+    const todayKey = dayKey(new Date())
+    const monthIdx = calMonth.getMonth()
+
+    const shift = (delta: number) =>
+      setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + delta, 1))
+
+    return (
+      <div className="flex flex-col gap-3">
+        {/* Month nav */}
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => shift(-1)}
+            className="p-1.5 rounded-md"
+            style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-3)' }}
+            aria-label="Mois précédent"
+          >
+            <ChevronLeftIcon size={15} />
+          </button>
+          <span className="text-sm font-semibold capitalize" style={{ color: 'var(--color-ink)' }}>
+            {MONTH_LABELS[monthIdx]} {calMonth.getFullYear()}
+          </span>
+          <button
+            type="button"
+            onClick={() => shift(1)}
+            className="p-1.5 rounded-md"
+            style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-3)' }}
+            aria-label="Mois suivant"
+          >
+            <ChevronRightIcon size={15} />
+          </button>
+        </div>
+
+        {/* Weekday header */}
+        <div className="grid grid-cols-7 gap-1">
+          {DAY_LABELS.map((d) => (
+            <div key={d} className="text-center text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Day grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((d, i) => {
+            const k = dayKey(d)
+            const inMonth = d.getMonth() === monthIdx
+            const isToday = k === todayKey
+            const dayTasks = byDay.get(k) ?? []
+            return (
+              <div
+                key={i}
+                className="rounded-md p-1 flex flex-col gap-0.5"
+                style={{
+                  minHeight: 62,
+                  background: inMonth ? 'var(--color-bg-2)' : 'transparent',
+                  border: `1px solid ${isToday ? 'var(--color-lime)' : 'var(--color-line)'}`,
+                  opacity: inMonth ? 1 : 0.4,
+                }}
+              >
+                <span
+                  className="text-[10px] font-medium tabular-nums"
+                  style={{ color: isToday ? 'var(--color-lime)' : 'var(--color-ink-4)' }}
+                >
+                  {d.getDate()}
+                </span>
+                {dayTasks.slice(0, 3).map((t) => {
+                  const meta = statusMeta(t.status)
+                  const who = t.assigneeId ? memberName.get(t.assigneeId) : null
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setView('list')
+                        if (canEdit) startEdit(t)
+                      }}
+                      title={`${t.title}${who ? ` — ${who}` : ''} (${meta.label})`}
+                      className="text-left truncate rounded px-1 py-0.5 text-[9.5px] leading-tight"
+                      style={{
+                        background: `color-mix(in oklab, ${meta.color} 18%, transparent)`,
+                        color: 'var(--color-ink-2)',
+                        borderLeft: `2px solid ${meta.color}`,
+                        textDecoration: t.status === 'VALIDE' ? 'line-through' : 'none',
+                      }}
+                    >
+                      {t.title}
+                    </button>
+                  )
+                })}
+                {dayTasks.length > 3 && (
+                  <span className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>
+                    +{dayTasks.length - 3}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Undated open tasks (not on the calendar) */}
+        {undated.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+              Sans échéance
+            </span>
+            {undated.map((t) => {
+              const meta = statusMeta(t.status)
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setView('list')
+                    if (canEdit) startEdit(t)
+                  }}
+                  className="truncate max-w-[160px] rounded px-1.5 py-0.5 text-[10px]"
+                  style={{
+                    background: `color-mix(in oklab, ${meta.color} 14%, transparent)`,
+                    color: 'var(--color-ink-2)',
+                    borderLeft: `2px solid ${meta.color}`,
+                  }}
+                >
+                  {t.title}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const openCount = tasks.filter((t) => t.status !== 'VALIDE' && t.status !== 'IMPOSSIBLE').length
   const doneCount = tasks.filter((t) => t.status === 'VALIDE').length
 
@@ -608,6 +787,26 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
               {openCount} en cours/à faire · {doneCount} validées
             </span>
             <div className="flex-1" />
+            {/* View toggle: pipeline list vs calendar */}
+            <div className="flex rounded-md overflow-hidden" style={{ border: '1px solid var(--color-line)' }}>
+              {([
+                { v: 'list' as const, icon: <ListIcon size={12} />, label: 'Liste' },
+                { v: 'calendar' as const, icon: <CalendarIcon size={12} />, label: 'Calendrier' },
+              ]).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => setView(o.v)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium"
+                  style={{
+                    background: view === o.v ? 'color-mix(in oklab, var(--color-lime) 16%, transparent)' : 'var(--color-bg-2)',
+                    color: view === o.v ? 'var(--color-lime)' : 'var(--color-ink-3)',
+                  }}
+                >
+                  {o.icon} {o.label}
+                </button>
+              ))}
+            </div>
             {canEdit && (
               <button
                 type="button"
@@ -669,6 +868,8 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
               <p className="text-xs" style={{ color: 'var(--color-ink-4)' }}>
                 Aucune tâche. {canEdit ? 'Chargez le modèle trail pour démarrer avec la checklist type (préfecture, assurance, secours, balisage…), ou ajoutez vos propres tâches.' : ''}
               </p>
+            ) : view === 'calendar' ? (
+              <Calendar />
             ) : (
               <>
                 {STATUS_ORDER.map((s) => (
