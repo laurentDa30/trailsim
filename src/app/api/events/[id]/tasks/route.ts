@@ -2,15 +2,18 @@ import { auth } from "@/lib/auth"
 import db from "@/lib/db"
 import { getEventAccess, canManage, canRead } from "@/lib/authz"
 import { z } from "zod"
+import { TASK_CATEGORY_VALUES, TASK_STATUS_VALUES, doneFromStatus } from "@/lib/tasks"
 
 const TaskCreateSchema = z.object({
   title: z.string().min(1).max(300),
-  category: z
-    .enum(["ADMINISTRATIF", "SECURITE", "LOGISTIQUE", "COMMUNICATION", "GENERAL"])
-    .default("GENERAL"),
+  category: z.enum(TASK_CATEGORY_VALUES).default("GENERAL"),
+  status: z.enum(TASK_STATUS_VALUES).default("EN_ATTENTE"),
   dueDate: z.string().datetime().nullable().optional(),
   parentId: z.string().nullable().optional(),
   note: z.string().max(1000).nullable().optional(),
+  assigneeId: z.string().nullable().optional(),
+  amountEstimated: z.number().nonnegative().nullable().optional(),
+  amountActual: z.number().nonnegative().nullable().optional(),
 })
 
 export async function GET(
@@ -61,14 +64,22 @@ export async function POST(
       parentId = parent.parentId ?? parent.id
     }
 
+    const status = parsed.data.status
+    const done = doneFromStatus(status)
     const task = await db.task.create({
       data: {
         eventId: id,
         title: parsed.data.title,
         category: parsed.data.category,
+        status,
+        done,
+        doneAt: done ? new Date() : null,
         dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
         parentId,
         note: parsed.data.note ?? null,
+        assigneeId: parsed.data.assigneeId ?? null,
+        amountEstimated: parsed.data.amountEstimated ?? null,
+        amountActual: parsed.data.amountActual ?? null,
       },
     })
     return Response.json(task, { status: 201 })

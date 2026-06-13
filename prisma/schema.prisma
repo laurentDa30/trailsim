@@ -84,9 +84,18 @@ model Task {
   event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   title     String
   category  String    @default("GENERAL") // ADMINISTRATIF | SECURITE | LOGISTIQUE | COMMUNICATION | GENERAL
+  // Pipeline status. `done` is kept in sync (done = status VALIDE) so existing
+  // dashboard reminders keep working without a data migration.
+  status    String    @default("EN_ATTENTE") // EN_ATTENTE | EN_COURS | VALIDE | IMPOSSIBLE
   dueDate   DateTime?
   done      Boolean   @default(false)
   doneAt    DateTime?
+  // Person responsible: an EventMember id (plain reference; name resolved in the
+  // UI from the member list, so deleting a member can't cascade-delete a task).
+  assigneeId String?
+  // Budget: estimated vs actual cost (lots, chrono, médecin…). Null = no amount.
+  amountEstimated Float?
+  amountActual    Float?
   // Sub-task support: a task can belong to a parent task (one level expected).
   parentId  String?
   parent    Task?     @relation("SubTasks", fields: [parentId], references: [id], onDelete: Cascade)

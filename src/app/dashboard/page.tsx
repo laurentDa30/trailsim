@@ -42,7 +42,7 @@ export default async function DashboardPage() {
         },
       },
       tasks: {
-        select: { done: true, dueDate: true },
+        select: { done: true, dueDate: true, status: true },
       },
       members: {
         select: { role: true, status: true },
@@ -63,6 +63,9 @@ export default async function DashboardPage() {
     for (const t of e.tasks) {
       if (t.done) {
         done++
+      } else if (t.status === "IMPOSSIBLE") {
+        // Marked impossible — neither a reminder nor counted as pending.
+        continue
       } else if (t.dueDate && new Date(t.dueDate).getTime() < now) {
         overdue++
       } else {

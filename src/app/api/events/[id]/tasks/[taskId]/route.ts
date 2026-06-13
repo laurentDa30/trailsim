@@ -2,15 +2,18 @@ import { auth } from "@/lib/auth"
 import db from "@/lib/db"
 import { getEventAccess, canManage } from "@/lib/authz"
 import { z } from "zod"
+import { TASK_CATEGORY_VALUES, TASK_STATUS_VALUES, doneFromStatus } from "@/lib/tasks"
 
 const TaskPatchSchema = z.object({
   title: z.string().min(1).max(300).optional(),
-  category: z
-    .enum(["ADMINISTRATIF", "SECURITE", "LOGISTIQUE", "COMMUNICATION", "GENERAL"])
-    .optional(),
+  category: z.enum(TASK_CATEGORY_VALUES).optional(),
+  status: z.enum(TASK_STATUS_VALUES).optional(),
   dueDate: z.string().datetime().nullable().optional(),
   done: z.boolean().optional(),
   note: z.string().max(1000).nullable().optional(),
+  assigneeId: z.string().nullable().optional(),
+  amountEstimated: z.number().nonnegative().nullable().optional(),
+  amountActual: z.number().nonnegative().nullable().optional(),
 })
 
 async function authorize(sessionUserId: string, eventId: string, taskId: string) {
@@ -40,13 +43,22 @@ export async function PATCH(
     if (!parsed.success) {
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
-    const { dueDate, done, ...rest } = parsed.data
+    const { dueDate, done, status, ...rest } = parsed.data
+    // Keep `done` in sync with `status` (done = VALIDE). `status` wins when both
+    // come in; a legacy `done` toggle maps to VALIDE / EN_ATTENTE.
+    let donePatch: { status?: string; done: boolean; doneAt: Date | null } | null = null
+    if (status !== undefined) {
+      const d = doneFromStatus(status)
+      donePatch = { status, done: d, doneAt: d ? new Date() : null }
+    } else if (done !== undefined) {
+      donePatch = { status: done ? "VALIDE" : "EN_ATTENTE", done, doneAt: done ? new Date() : null }
+    }
     const updated = await db.task.update({
       where: { id: taskId },
       data: {
         ...rest,
         ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
-        ...(done !== undefined ? { done, doneAt: done ? new Date() : null } : {}),
+        ...(donePatch ?? {}),
       },
     })
     return Response.json(updated)
