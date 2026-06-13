@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Calendar, MapPin, Play, BarChart2, Users, ClipboardList, Trash2, AlertTriangle } from "lucide-react"
+import { Calendar, MapPin, Play, BarChart2, Users, ClipboardList, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type SimulationStatus = "PENDING" | "RUNNING" | "DONE" | "ERROR"
@@ -33,8 +33,10 @@ interface EventCardProps {
   totalRunners: number
   latestSimulation?: Simulation | null
   status?: SimulationStatus
-  /** Open-task reminders: overdue + due within 14 days (null = nothing due). */
-  taskAlert?: { overdue: number; upcoming: number } | null
+  /** Task breakdown for the reminders strip (null = no tasks). */
+  taskStats?: { overdue: number; pending: number; done: number } | null
+  /** Volunteer counts (validated = accepted invite). null = no volunteers. */
+  volunteers?: { validated: number; total: number } | null
 }
 
 function StatusBadge({ status }: { status: SimulationStatus }) {
@@ -210,10 +212,36 @@ export function EventCard({
   races,
   totalRunners,
   latestSimulation,
-  taskAlert,
+  taskStats,
+  volunteers,
 }: EventCardProps) {
   const router = useRouter()
   const simStatus: SimulationStatus = latestSimulation?.status ?? "PENDING"
+
+  // Days until the event (00:00-based, so "today" = 0 regardless of time).
+  const daysLeft = (() => {
+    if (!date) return null
+    const d = new Date(date)
+    d.setHours(0, 0, 0, 0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return Math.round((d.getTime() - today.getTime()) / 86_400_000)
+  })()
+
+  const countdown =
+    daysLeft == null
+      ? null
+      : daysLeft > 0
+      ? {
+          label: `reste ${daysLeft} j`,
+          color: daysLeft <= 7 ? "var(--color-warning)" : "var(--color-lime)",
+        }
+      : daysLeft === 0
+      ? { label: "Jour J", color: "var(--color-lime)" }
+      : { label: "Passé", color: "var(--color-ink-4)" }
+
+  const hasTasks =
+    taskStats != null && taskStats.overdue + taskStats.pending + taskStats.done > 0
 
   async function handleDelete() {
     if (!confirm(`Supprimer l'événement « ${name} » et toutes ses simulations ? Cette action est irréversible.`)) return
@@ -275,6 +303,17 @@ export function EventCard({
             {formattedDate}
           </div>
         )}
+        {countdown && (
+          <span
+            className="text-xs font-medium px-2 py-0.5 rounded-full"
+            style={{
+              color: countdown.color,
+              backgroundColor: `color-mix(in srgb, ${countdown.color} 12%, transparent)`,
+            }}
+          >
+            {countdown.label}
+          </span>
+        )}
         {location && (
           <div
             className="flex items-center gap-1.5 text-xs"
@@ -318,27 +357,59 @@ export function EventCard({
         </div>
       )}
 
-      {/* Task reminders */}
-      {taskAlert && (
-        <Link
-          href={`/events/${id}/taches`}
-          className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5"
-          style={{
-            color: taskAlert.overdue > 0 ? "var(--color-danger)" : "var(--color-warning)",
-            backgroundColor:
-              taskAlert.overdue > 0
-                ? "color-mix(in srgb, var(--color-danger) 8%, transparent)"
-                : "color-mix(in srgb, var(--color-warning) 10%, transparent)",
-            border: `1px solid color-mix(in srgb, ${
-              taskAlert.overdue > 0 ? "var(--color-danger)" : "var(--color-warning)"
-            } 25%, transparent)`,
-          }}
+      {/* Reminders: tasks + volunteers */}
+      {(hasTasks || (volunteers && volunteers.total > 0)) && (
+        <div
+          className="flex flex-col rounded-lg overflow-hidden"
+          style={{ border: "1px solid var(--color-line)" }}
         >
-          <AlertTriangle size={12} />
-          {taskAlert.overdue > 0 && `${taskAlert.overdue} tâche${taskAlert.overdue > 1 ? "s" : ""} en retard`}
-          {taskAlert.overdue > 0 && taskAlert.upcoming > 0 && " · "}
-          {taskAlert.upcoming > 0 && `${taskAlert.upcoming} sous 14 j`}
-        </Link>
+          {hasTasks && taskStats && (
+            <Link
+              href={`/events/${id}/taches`}
+              className="flex items-center justify-between gap-2 px-2.5 py-2 text-xs transition-colors hover:bg-[var(--color-bg-2)]"
+            >
+              <span className="flex items-center gap-1.5" style={{ color: "var(--color-ink-3)" }}>
+                <ClipboardList size={12} style={{ color: "var(--color-ink-4)" }} />
+                Tâches
+              </span>
+              <span className="flex items-center gap-2 tabular-nums">
+                {taskStats.overdue > 0 && (
+                  <span style={{ color: "var(--color-danger)" }}>
+                    {taskStats.overdue} dépassée{taskStats.overdue > 1 ? "s" : ""}
+                  </span>
+                )}
+                <span style={{ color: "var(--color-ink-3)" }}>
+                  {taskStats.pending} en attente
+                </span>
+                <span style={{ color: "var(--color-safe)" }}>
+                  {taskStats.done} terminée{taskStats.done > 1 ? "s" : ""}
+                </span>
+              </span>
+            </Link>
+          )}
+          {volunteers && volunteers.total > 0 && (
+            <Link
+              href={`/events/${id}/equipe`}
+              className="flex items-center justify-between gap-2 px-2.5 py-2 text-xs transition-colors hover:bg-[var(--color-bg-2)]"
+              style={hasTasks ? { borderTop: "1px solid var(--color-line)" } : undefined}
+            >
+              <span className="flex items-center gap-1.5" style={{ color: "var(--color-ink-3)" }}>
+                <Users size={12} style={{ color: "var(--color-ink-4)" }} />
+                Bénévoles
+              </span>
+              <span className="tabular-nums" style={{ color: "var(--color-ink-2)" }}>
+                <b style={{ color: "var(--color-lime)" }}>{volunteers.validated}</b> validé
+                {volunteers.validated > 1 ? "s" : ""}
+                {volunteers.total > volunteers.validated && (
+                  <span style={{ color: "var(--color-ink-4)" }}>
+                    {" · "}
+                    {volunteers.total - volunteers.validated} en attente
+                  </span>
+                )}
+              </span>
+            </Link>
+          )}
+        </div>
       )}
 
       {/* Runners total */}

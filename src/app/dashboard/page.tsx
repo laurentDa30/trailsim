@@ -42,26 +42,43 @@ export default async function DashboardPage() {
         },
       },
       tasks: {
-        where: { done: false },
-        select: { dueDate: true },
+        select: { done: true, dueDate: true },
+      },
+      members: {
+        select: { role: true, status: true },
       },
     },
     orderBy: { createdAt: "desc" },
   })
 
-  // Reminders: overdue + due within 14 days, per event (open tasks only).
+  // Per-event reminders: task breakdown (dépassées / en attente / terminées)
+  // and volunteer counts (validés = bénévoles ayant accepté l'invitation).
   const now = Date.now()
-  const taskAlerts = new Map<string, { overdue: number; upcoming: number }>()
+  const taskStatsMap = new Map<string, { overdue: number; pending: number; done: number }>()
+  const volunteerMap = new Map<string, { validated: number; total: number }>()
   for (const e of events) {
     let overdue = 0
-    let upcoming = 0
+    let pending = 0
+    let done = 0
     for (const t of e.tasks) {
-      if (!t.dueDate) continue
-      const diff = new Date(t.dueDate).getTime() - now
-      if (diff < 0) overdue++
-      else if (diff <= 14 * 86400_000) upcoming++
+      if (t.done) {
+        done++
+      } else if (t.dueDate && new Date(t.dueDate).getTime() < now) {
+        overdue++
+      } else {
+        pending++
+      }
     }
-    if (overdue + upcoming > 0) taskAlerts.set(e.id, { overdue, upcoming })
+    taskStatsMap.set(e.id, { overdue, pending, done })
+
+    let validated = 0
+    let total = 0
+    for (const m of e.members) {
+      if (m.role !== "BENEVOLE") continue
+      total++
+      if (m.status === "ACTIF") validated++
+    }
+    volunteerMap.set(e.id, { validated, total })
   }
 
   // Compute stats
@@ -216,7 +233,8 @@ export default async function DashboardPage() {
                 name={event.name}
                 date={event.date}
                 location={event.location}
-                taskAlert={taskAlerts.get(event.id) ?? null}
+                taskStats={taskStatsMap.get(event.id) ?? null}
+                volunteers={volunteerMap.get(event.id) ?? null}
                 races={event.races}
                 totalRunners={event.simulations[0]?.totalRunners ?? 0}
                 latestSimulation={
