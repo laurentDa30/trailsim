@@ -11,31 +11,42 @@ import {
   SparklesIcon,
   PencilIcon,
   ListPlusIcon,
+  UserIcon,
+  WalletIcon,
 } from 'lucide-react'
+import {
+  TASK_CATEGORIES,
+  TASK_STATUSES,
+  categoryMeta,
+  statusMeta,
+} from '@/lib/tasks'
 
 interface Task {
   id: string
   title: string
   category: string
+  status: string
   dueDate: string | null
   done: boolean
   parentId: string | null
   note: string | null
+  assigneeId: string | null
+  amountEstimated: number | null
+  amountActual: number | null
+}
+
+interface Member {
+  id: string
+  name: string
+  role: string
 }
 
 interface TachesViewProps {
   event: { id: string; name: string; location: string | null; date: string | null }
   initialTasks: Task[]
+  members: Member[]
   canEdit: boolean
 }
-
-const CATEGORIES = [
-  { value: 'ADMINISTRATIF', label: 'Administratif', color: '#60A5FA' },
-  { value: 'SECURITE', label: 'Sécurité', color: '#F87171' },
-  { value: 'LOGISTIQUE', label: 'Logistique', color: '#FBBF24' },
-  { value: 'COMMUNICATION', label: 'Communication', color: '#A78BFA' },
-  { value: 'GENERAL', label: 'Général', color: '#9CA3AF' },
-]
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--color-bg-2)',
@@ -43,14 +54,14 @@ const inputStyle: React.CSSProperties = {
   color: 'var(--color-ink)',
 }
 
-function catOf(value: string) {
-  return CATEGORIES.find((c) => c.value === value) ?? CATEGORIES[CATEGORIES.length - 1]
-}
-
 function fmtDate(iso: string) {
   return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(
     new Date(iso)
   )
+}
+
+function fmtMoney(n: number): string {
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' €'
 }
 
 /** Days from today to the due date (negative = overdue). */
@@ -62,27 +73,31 @@ function daysUntil(iso: string): number {
   return Math.round((due.getTime() - today.getTime()) / 86400_000)
 }
 
-export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
+// Pipeline display order.
+const STATUS_ORDER = ['EN_COURS', 'EN_ATTENTE', 'IMPOSSIBLE', 'VALIDE'] as const
+
+export function TachesView({ event, initialTasks, members, canEdit }: TachesViewProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('GENERAL')
   const [due, setDue] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // Status groups hold top-level tasks only; sub-tasks render under their parent.
+  const memberName = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const x of members) m.set(x.id, x.name)
+    return m
+  }, [members])
+
+  // Pipeline groups by status (top-level tasks only; sub-tasks render nested).
   const groups = useMemo(() => {
-    const overdue: Task[] = []
-    const upcoming: Task[] = []
-    const noDate: Task[] = []
-    const doneList: Task[] = []
+    const by: Record<string, Task[]> = { EN_COURS: [], EN_ATTENTE: [], IMPOSSIBLE: [], VALIDE: [] }
     for (const t of tasks) {
       if (t.parentId) continue
-      if (t.done) doneList.push(t)
-      else if (!t.dueDate) noDate.push(t)
-      else if (daysUntil(t.dueDate) < 0) overdue.push(t)
-      else upcoming.push(t)
+      const key = by[t.status] ? t.status : 'EN_ATTENTE'
+      by[key].push(t)
     }
-    return { overdue, upcoming, noDate, doneList }
+    return by
   }, [tasks])
 
   const childrenOf = useMemo(() => {
@@ -95,15 +110,43 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
     return map
   }, [tasks])
 
-  // Inline edit state (one task at a time)
+  // Budget rollup (all tasks, incl. sub-tasks).
+  const budget = useMemo(() => {
+    let est = 0
+    let act = 0
+    let hasAny = false
+    for (const t of tasks) {
+      if (t.amountEstimated != null) {
+        est += t.amountEstimated
+        hasAny = true
+      }
+      if (t.amountActual != null) {
+        act += t.amountActual
+        hasAny = true
+      }
+    }
+    return { est, act, hasAny }
+  }, [tasks])
+
+  // Inline edit state (one task at a time) — title, category, date, amounts, note.
   const [editingId, setEditingId] = useState<string | null>(null)
   const [eTitle, setETitle] = useState('')
   const [eCategory, setECategory] = useState('GENERAL')
   const [eDue, setEDue] = useState('')
+  const [eEst, setEEst] = useState('')
+  const [eAct, setEAct] = useState('')
 
   // Quick "add sub-task" state (one parent at a time)
   const [subFor, setSubFor] = useState<string | null>(null)
   const [subTitle, setSubTitle] = useState('')
+
+  function patch(id: string, body: Record<string, unknown>) {
+    return fetch(`/api/events/${event.id}/tasks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }
 
   async function addTask(e: React.FormEvent) {
     e.preventDefault()
@@ -144,14 +187,15 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
     }
   }
 
-  async function toggleDone(t: Task) {
-    const done = !t.done
-    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, done } : x)))
-    await fetch(`/api/events/${event.id}/tasks/${t.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ done }),
-    }).catch(() => {})
+  function setStatus(t: Task, status: string) {
+    const done = status === 'VALIDE'
+    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status, done } : x)))
+    patch(t.id, { status })
+  }
+
+  function setAssignee(t: Task, assigneeId: string | null) {
+    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, assigneeId } : x)))
+    patch(t.id, { assigneeId })
   }
 
   async function removeTask(id: string) {
@@ -165,23 +209,31 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
     setETitle(t.title)
     setECategory(t.category)
     setEDue(t.dueDate ? t.dueDate.slice(0, 10) : '')
+    setEEst(t.amountEstimated != null ? String(t.amountEstimated) : '')
+    setEAct(t.amountActual != null ? String(t.amountActual) : '')
   }
 
   async function saveEdit() {
     if (!editingId || !eTitle.trim()) return
     const dueIso = eDue ? new Date(`${eDue}T12:00:00`).toISOString() : null
+    const est = eEst.trim() === '' ? null : Math.max(0, Number(eEst))
+    const act = eAct.trim() === '' ? null : Math.max(0, Number(eAct))
     setTasks((prev) =>
       prev.map((t) =>
-        t.id === editingId ? { ...t, title: eTitle.trim(), category: eCategory, dueDate: dueIso } : t
+        t.id === editingId
+          ? { ...t, title: eTitle.trim(), category: eCategory, dueDate: dueIso, amountEstimated: est, amountActual: act }
+          : t
       )
     )
     const id = editingId
     setEditingId(null)
-    await fetch(`/api/events/${event.id}/tasks/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: eTitle.trim(), category: eCategory, dueDate: dueIso }),
-    }).catch(() => {})
+    await patch(id, {
+      title: eTitle.trim(),
+      category: eCategory,
+      dueDate: dueIso,
+      amountEstimated: est,
+      amountActual: act,
+    })
   }
 
   async function addSubTask(parent: Task) {
@@ -205,11 +257,13 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
   }
 
   function Row({ t, depth = 0 }: { t: Task; depth?: number }) {
-    const cat = catOf(t.category)
+    const cat = categoryMeta(t.category)
+    const st = statusMeta(t.status)
     const d = t.dueDate ? daysUntil(t.dueDate) : null
-    const late = !t.done && d != null && d < 0
-    const soon = !t.done && d != null && d >= 0 && d <= 14
+    const late = t.status !== 'VALIDE' && t.status !== 'IMPOSSIBLE' && d != null && d < 0
+    const soon = t.status !== 'VALIDE' && d != null && d >= 0 && d <= 14
     const kids = childrenOf.get(t.id) ?? []
+    const assignee = t.assigneeId ? memberName.get(t.assigneeId) : null
 
     if (editingId === t.id) {
       return (
@@ -238,10 +292,8 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
             className="px-1.5 py-1 rounded text-[11px]"
             style={inputStyle}
           >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
+            {TASK_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
           <input
@@ -249,6 +301,24 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
             value={eDue}
             onChange={(e) => setEDue(e.target.value)}
             className="px-1.5 py-1 rounded text-[11px]"
+            style={inputStyle}
+          />
+          <input
+            type="number"
+            min={0}
+            value={eEst}
+            onChange={(e) => setEEst(e.target.value)}
+            placeholder="Estimé €"
+            className="w-24 px-1.5 py-1 rounded text-[11px]"
+            style={inputStyle}
+          />
+          <input
+            type="number"
+            min={0}
+            value={eAct}
+            onChange={(e) => setEAct(e.target.value)}
+            placeholder="Réel €"
+            className="w-24 px-1.5 py-1 rounded text-[11px]"
             style={inputStyle}
           />
           <button
@@ -283,28 +353,50 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
           marginLeft: depth * 22,
           background: 'var(--color-bg-2)',
           border: `1px solid ${late ? 'color-mix(in oklab, var(--color-danger, #DC2626) 40%, var(--color-line))' : 'var(--color-line)'}`,
-          opacity: t.done ? 0.55 : 1,
+          opacity: t.status === 'VALIDE' ? 0.6 : t.status === 'IMPOSSIBLE' ? 0.7 : 1,
         }}
       >
-        <input
-          type="checkbox"
-          checked={t.done}
-          disabled={!canEdit}
-          onChange={() => toggleDone(t)}
-          className="shrink-0 accent-[var(--color-lime)]"
-          aria-label={t.done ? 'Marquer à faire' : 'Marquer faite'}
-        />
+        {/* Status control */}
+        {canEdit ? (
+          <select
+            value={t.status}
+            onChange={(e) => setStatus(t, e.target.value)}
+            className="shrink-0 text-[10.5px] font-semibold rounded px-1.5 py-1"
+            style={{
+              background: `color-mix(in oklab, ${st.color} 14%, var(--color-bg-2))`,
+              border: `1px solid color-mix(in oklab, ${st.color} 45%, transparent)`,
+              color: st.color,
+            }}
+            aria-label="Statut"
+          >
+            {TASK_STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        ) : (
+          <span
+            className="shrink-0 text-[10.5px] font-semibold rounded px-1.5 py-1"
+            style={{
+              background: `color-mix(in oklab, ${st.color} 14%, var(--color-bg-2))`,
+              border: `1px solid color-mix(in oklab, ${st.color} 45%, transparent)`,
+              color: st.color,
+            }}
+          >
+            {st.label}
+          </span>
+        )}
+
         <div className="min-w-0 flex-1">
           <div
             className="text-xs font-medium truncate"
             style={{
               color: 'var(--color-ink)',
-              textDecoration: t.done ? 'line-through' : 'none',
+              textDecoration: t.status === 'VALIDE' ? 'line-through' : 'none',
             }}
           >
             {t.title}
           </div>
-          <div className="flex items-center gap-2 text-[10.5px]" style={{ color: 'var(--color-ink-4)' }}>
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10.5px]" style={{ color: 'var(--color-ink-4)' }}>
             <span className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.color }} />
               {cat.label}
@@ -312,27 +404,48 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
             {t.dueDate && (
               <span
                 className="flex items-center gap-1"
-                style={{
-                  color: late
-                    ? 'var(--color-danger, #DC2626)'
-                    : soon
-                      ? 'var(--color-warning)'
-                      : 'var(--color-ink-4)',
-                }}
+                style={{ color: late ? 'var(--color-danger, #DC2626)' : soon ? 'var(--color-warning)' : 'var(--color-ink-4)' }}
               >
                 <CalendarIcon size={10} />
                 {fmtDate(t.dueDate)}
-                {!t.done && d != null && (
-                  <span>
-                    {d < 0 ? `· en retard de ${-d} j` : d === 0 ? '· aujourd’hui' : `· J−${d}`}
-                  </span>
+                {t.status !== 'VALIDE' && d != null && (
+                  <span>{d < 0 ? `· retard ${-d} j` : d === 0 ? '· aujourd’hui' : `· J−${d}`}</span>
                 )}
+              </span>
+            )}
+            {assignee && (
+              <span className="flex items-center gap-1">
+                <UserIcon size={10} />
+                {assignee}
+              </span>
+            )}
+            {(t.amountEstimated != null || t.amountActual != null) && (
+              <span className="flex items-center gap-1">
+                <WalletIcon size={10} />
+                {t.amountEstimated != null && `est. ${fmtMoney(t.amountEstimated)}`}
+                {t.amountEstimated != null && t.amountActual != null && ' · '}
+                {t.amountActual != null && `réel ${fmtMoney(t.amountActual)}`}
               </span>
             )}
           </div>
         </div>
+
         {canEdit && (
           <div className="flex items-center gap-0.5 shrink-0">
+            {/* Assignee dropdown (organisers + bénévoles) */}
+            <select
+              value={t.assigneeId ?? ''}
+              onChange={(e) => setAssignee(t, e.target.value || null)}
+              className="text-[10.5px] rounded px-1 py-1 max-w-[110px]"
+              style={inputStyle}
+              aria-label="Responsable"
+              title="Responsable"
+            >
+              <option value="">— Qui ?</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
             {depth === 0 && (
               <button
                 type="button"
@@ -415,16 +528,20 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
     )
   }
 
-  function Group({ label, items, tone }: { label: string; items: Task[]; tone?: 'danger' }) {
+  function Group({ statusValue }: { statusValue: string }) {
+    const items = groups[statusValue] ?? []
     if (items.length === 0) return null
+    const meta = statusMeta(statusValue)
+    const danger = statusValue === 'IMPOSSIBLE'
     return (
       <div className="flex flex-col gap-1.5">
         <div
           className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider"
-          style={{ color: tone === 'danger' ? 'var(--color-danger, #DC2626)' : 'var(--color-ink-4)' }}
+          style={{ color: meta.color }}
         >
-          {tone === 'danger' && <AlertTriangleIcon size={11} />}
-          {label} ({items.length})
+          {danger && <AlertTriangleIcon size={11} />}
+          <span className="w-2 h-2 rounded-full" style={{ background: meta.color }} />
+          {meta.label} ({items.length})
         </div>
         {items.map((t) => (
           <Row key={t.id} t={t} />
@@ -432,6 +549,9 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
       </div>
     )
   }
+
+  const openCount = tasks.filter((t) => t.status !== 'VALIDE' && t.status !== 'IMPOSSIBLE').length
+  const doneCount = tasks.filter((t) => t.status === 'VALIDE').length
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
@@ -444,6 +564,32 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
       />
 
       <main className="flex-1 w-full max-w-3xl mx-auto p-4 flex flex-col gap-4">
+        {/* Budget summary */}
+        {budget.hasAny && (
+          <section
+            className="rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-1"
+            style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
+          >
+            <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+              <WalletIcon size={14} style={{ color: 'var(--color-lime)' }} /> Budget
+            </span>
+            <span className="text-xs" style={{ color: 'var(--color-ink-3)' }}>
+              Estimé <b style={{ color: 'var(--color-ink)' }}>{fmtMoney(budget.est)}</b>
+            </span>
+            <span className="text-xs" style={{ color: 'var(--color-ink-3)' }}>
+              Réel <b style={{ color: 'var(--color-ink)' }}>{fmtMoney(budget.act)}</b>
+            </span>
+            {budget.act > 0 && (
+              <span
+                className="text-xs"
+                style={{ color: budget.act > budget.est ? 'var(--color-danger, #DC2626)' : 'var(--color-safe, #22C55E)' }}
+              >
+                Écart {budget.act - budget.est >= 0 ? '+' : ''}{fmtMoney(budget.act - budget.est)}
+              </span>
+            )}
+          </section>
+        )}
+
         <section
           className="rounded-xl overflow-hidden"
           style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
@@ -456,10 +602,10 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
               <ClipboardListIcon size={15} />
             </span>
             <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
-              Tâches d’organisation
+              Pipeline d’organisation
             </span>
             <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
-              {tasks.filter((t) => !t.done).length} à faire · {groups.doneList.length} faites
+              {openCount} en cours/à faire · {doneCount} validées
             </span>
             <div className="flex-1" />
             {canEdit && (
@@ -469,11 +615,7 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
                 disabled={busy}
                 title="Ajoute la checklist type d'un trail (déclaration préfecture, secours, balisage…), calée sur la date de l'événement"
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium"
-                style={{
-                  background: 'var(--color-bg-2)',
-                  border: '1px solid var(--color-line)',
-                  color: 'var(--color-ink-2)',
-                }}
+                style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
               >
                 <SparklesIcon size={12} /> Charger le modèle trail
               </button>
@@ -497,10 +639,8 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
                   className="px-2 py-1.5 rounded-md text-xs"
                   style={inputStyle}
                 >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {c.label}
-                    </option>
+                  {TASK_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
                 </select>
                 <input
@@ -531,10 +671,9 @@ export function TachesView({ event, initialTasks, canEdit }: TachesViewProps) {
               </p>
             ) : (
               <>
-                <Group label="En retard" items={groups.overdue} tone="danger" />
-                <Group label="À venir" items={groups.upcoming} />
-                <Group label="Sans échéance" items={groups.noDate} />
-                <Group label="Terminées" items={groups.doneList} />
+                {STATUS_ORDER.map((s) => (
+                  <Group key={s} statusValue={s} />
+                ))}
               </>
             )}
           </div>

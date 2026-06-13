@@ -27,6 +27,13 @@ export default async function TachesPage({ params }: PageProps) {
     orderBy: [{ done: 'asc' }, { dueDate: 'asc' }, { createdAt: 'asc' }],
   })
 
+  // Bureau members the tasks can be assigned to (organisers first).
+  const members = await db.eventMember.findMany({
+    where: { eventId: id },
+    select: { id: true, name: true, role: true },
+    orderBy: [{ role: 'asc' }, { name: 'asc' }],
+  })
+
   return (
     <TachesView
       event={{
@@ -39,11 +46,16 @@ export default async function TachesPage({ params }: PageProps) {
         id: t.id,
         title: t.title,
         category: t.category,
+        status: t.status,
         dueDate: t.dueDate ? t.dueDate.toISOString() : null,
         done: t.done,
         parentId: t.parentId,
         note: t.note,
+        assigneeId: t.assigneeId,
+        amountEstimated: t.amountEstimated,
+        amountActual: t.amountActual,
       }))}
+      members={members}
       canEdit={canManage(access)}
     />
   )
