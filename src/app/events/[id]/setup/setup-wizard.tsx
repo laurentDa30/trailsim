@@ -54,24 +54,21 @@ export function SetupWizard({ event, races: initialRaces, simulation, benevolesR
       if (simulation?.ressources) {
         const parsed = JSON.parse(simulation.ressources) as {
           effectifTotal?: number
-          benevolesFictifs?: number
+          objectifTotal?: number
           barrieres?: number
         }
-        // Prefer the saved fictional count; fall back to (old effectifTotal −
-        // current real count) for simulations saved before this split existed.
-        const fictifs =
-          parsed.benevolesFictifs ??
-          Math.max(0, (parsed.effectifTotal ?? benevolesReels) - benevolesReels)
-        return { fictifs, barrieres: parsed.barrieres ?? 20 }
+        // The objectif is the saved target (older sims: their effectifTotal).
+        const objectif = parsed.objectifTotal ?? parsed.effectifTotal ?? benevolesReels
+        return { objectif, barrieres: parsed.barrieres ?? 20 }
       }
     } catch {
       /* fall through to defaults */
     }
-    return { fictifs: 0, barrieres: 20 }
+    return { objectif: benevolesReels, barrieres: 20 }
   })
 
-  // Total deployable staff = real roster volunteers + fictional placeholders.
-  const effectifTotal = benevolesReels + resources.fictifs
+  // Real roster volunteers fill the objectif; the total never drops below them.
+  const effectifTotal = Math.max(resources.objectif, benevolesReels)
 
   const [jamThreshold, setJamThreshold] = useState<number>(simulation?.jamThreshold ?? 10)
   const [affluenceThreshold, setAffluenceThreshold] = useState<number>(simulation?.affluenceThreshold ?? 15)
@@ -204,7 +201,7 @@ export function SetupWizard({ event, races: initialRaces, simulation, benevolesR
           ressources: JSON.stringify({
             effectifTotal,
             benevolesReels,
-            benevolesFictifs: resources.fictifs,
+            objectifTotal: resources.objectif,
             barrieres: resources.barrieres,
           }),
         }),

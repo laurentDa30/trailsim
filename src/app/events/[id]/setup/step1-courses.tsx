@@ -43,8 +43,9 @@ interface GpxState {
 }
 
 export interface Resources {
-  /** Fictional volunteers added on top of the real roster ("à rechercher"). */
-  fictifs: number
+  /** Target headcount for the event (objectif). Real roster volunteers fill it;
+   *  the shortfall is "à rechercher". */
+  objectif: number
   barrieres: number
 }
 
@@ -100,10 +101,13 @@ export function Step1Courses({
     })
     return init
   })
-  const fictifs = resources.fictifs
   const barrieres = resources.barrieres
-  const effectifTotal = benevolesReels + fictifs
-  const setFictifs = (v: number) => onResourcesChange({ ...resources, fictifs: v })
+  // Real roster volunteers fill the target; the shortfall is "à rechercher".
+  // Adding real volunteers therefore lowers "à rechercher" while the total
+  // (objectif) stays put.
+  const effectifTotal = Math.max(resources.objectif, benevolesReels)
+  const aRechercher = Math.max(0, effectifTotal - benevolesReels)
+  const setObjectif = (v: number) => onResourcesChange({ ...resources, objectif: v })
   const setBarrieres = (v: number) => onResourcesChange({ ...resources, barrieres: v })
   const [adding, setAdding] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -462,23 +466,23 @@ export function Step1Courses({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-[var(--color-ink-3)] mb-2">
-              Bénévoles fictifs (à rechercher)
+              Effectif visé (objectif)
             </label>
             <NumStep
-              value={fictifs}
-              onChange={setFictifs}
+              value={effectifTotal}
+              onChange={setObjectif}
               step={1}
               min={0}
               max={500}
-              suffix="à rechercher"
+              suffix="personnes"
             />
             <p className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--color-ink-4)' }}>
               <b style={{ color: 'var(--color-lime)' }}>{benevolesReels}</b> validé
               {benevolesReels > 1 ? 's' : ''} (équipe)
-              {fictifs > 0 && (
+              {aRechercher > 0 && (
                 <>
                   {' · '}
-                  <b style={{ color: 'var(--color-warning)' }}>{fictifs}</b> à rechercher
+                  <b style={{ color: 'var(--color-warning)' }}>{aRechercher}</b> à rechercher
                 </>
               )}
               {' → '}
