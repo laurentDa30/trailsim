@@ -43,7 +43,8 @@ interface GpxState {
 }
 
 export interface Resources {
-  effectif: number
+  /** Fictional volunteers added on top of the real roster ("à rechercher"). */
+  fictifs: number
   barrieres: number
 }
 
@@ -63,6 +64,8 @@ interface Step1CoursesProps {
   onUpdate: (races: Race[]) => void
   resources: Resources
   onResourcesChange: (r: Resources) => void
+  /** Real volunteers on the roster (auto, read-only here). */
+  benevolesReels: number
   startClock: string | null
   onStartClockChange: (v: string | null) => void
 }
@@ -73,6 +76,7 @@ export function Step1Courses({
   onUpdate,
   resources,
   onResourcesChange,
+  benevolesReels,
   startClock,
   onStartClockChange,
 }: Step1CoursesProps) {
@@ -96,9 +100,10 @@ export function Step1Courses({
     })
     return init
   })
-  const effectif = resources.effectif
+  const fictifs = resources.fictifs
   const barrieres = resources.barrieres
-  const setEffectif = (v: number) => onResourcesChange({ ...resources, effectif: v })
+  const effectifTotal = benevolesReels + fictifs
+  const setFictifs = (v: number) => onResourcesChange({ ...resources, fictifs: v })
   const setBarrieres = (v: number) => onResourcesChange({ ...resources, barrieres: v })
   const [adding, setAdding] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -454,17 +459,32 @@ export function Step1Courses({
       {/* Resources */}
       <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg-1)] p-5">
         <h3 className="text-sm font-semibold text-[var(--color-ink)] mb-4">Ressources disponibles</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-[var(--color-ink-3)] mb-2">Effectif disponible</label>
+            <label className="block text-xs text-[var(--color-ink-3)] mb-2">
+              Bénévoles fictifs (à rechercher)
+            </label>
             <NumStep
-              value={effectif}
-              onChange={setEffectif}
-              step={5}
+              value={fictifs}
+              onChange={setFictifs}
+              step={1}
               min={0}
               max={500}
-              suffix="personnes"
+              suffix="à rechercher"
             />
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: 'var(--color-ink-4)' }}>
+              <b style={{ color: 'var(--color-lime)' }}>{benevolesReels}</b> validé
+              {benevolesReels > 1 ? 's' : ''} (équipe)
+              {fictifs > 0 && (
+                <>
+                  {' · '}
+                  <b style={{ color: 'var(--color-warning)' }}>{fictifs}</b> à rechercher
+                </>
+              )}
+              {' → '}
+              <b style={{ color: 'var(--color-ink-2)' }}>{effectifTotal}</b> au total.{' '}
+              {benevolesReels === 0 && 'Ajoutez vos bénévoles depuis l’onglet Équipe.'}
+            </p>
           </div>
           <div>
             <label className="block text-xs text-[var(--color-ink-3)] mb-2">Barrières disponibles</label>

@@ -37,9 +37,11 @@ interface SetupWizardProps {
   event: { id: string; name: string; location?: string | null; startClock?: string | null }
   races: RaceWithSegments[]
   simulation: SimulationWithProfiles | null
+  /** Real volunteers on the event roster (counted as "validés"). */
+  benevolesReels: number
 }
 
-export function SetupWizard({ event, races: initialRaces, simulation }: SetupWizardProps) {
+export function SetupWizard({ event, races: initialRaces, simulation, benevolesReels }: SetupWizardProps) {
   const router = useRouter()
   const [step, setStep] = useState<Step>(1)
   const [races, setRaces] = useState(initialRaces)
@@ -52,18 +54,24 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
       if (simulation?.ressources) {
         const parsed = JSON.parse(simulation.ressources) as {
           effectifTotal?: number
+          benevolesFictifs?: number
           barrieres?: number
         }
-        return {
-          effectif: parsed.effectifTotal ?? 45,
-          barrieres: parsed.barrieres ?? 20,
-        }
+        // Prefer the saved fictional count; fall back to (old effectifTotal −
+        // current real count) for simulations saved before this split existed.
+        const fictifs =
+          parsed.benevolesFictifs ??
+          Math.max(0, (parsed.effectifTotal ?? benevolesReels) - benevolesReels)
+        return { fictifs, barrieres: parsed.barrieres ?? 20 }
       }
     } catch {
       /* fall through to defaults */
     }
-    return { effectif: 45, barrieres: 20 }
+    return { fictifs: 0, barrieres: 20 }
   })
+
+  // Total deployable staff = real roster volunteers + fictional placeholders.
+  const effectifTotal = benevolesReels + resources.fictifs
 
   const [jamThreshold, setJamThreshold] = useState<number>(simulation?.jamThreshold ?? 10)
   const [affluenceThreshold, setAffluenceThreshold] = useState<number>(simulation?.affluenceThreshold ?? 15)
@@ -194,7 +202,9 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
           peloton: JSON.stringify(pelotonConfigs),
           logistique: JSON.stringify(logistics),
           ressources: JSON.stringify({
-            effectifTotal: resources.effectif,
+            effectifTotal,
+            benevolesReels,
+            benevolesFictifs: resources.fictifs,
             barrieres: resources.barrieres,
           }),
         }),
@@ -274,6 +284,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               onUpdate={(rs) => setRaces(rs as RaceWithSegments[])}
               resources={resources}
               onResourcesChange={setResources}
+              benevolesReels={benevolesReels}
               startClock={startClock}
               onStartClockChange={setStartClock}
             />
@@ -305,7 +316,7 @@ export function SetupWizard({ event, races: initialRaces, simulation }: SetupWiz
               onNRunsChange={setNRuns}
               logistics={logistics}
               onLogisticsChange={setLogistics}
-              resources={resources}
+              resources={{ effectif: effectifTotal, barrieres: resources.barrieres }}
             />
           )}
         </div>

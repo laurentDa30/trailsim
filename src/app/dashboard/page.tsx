@@ -71,14 +71,14 @@ export default async function DashboardPage() {
     }
     taskStatsMap.set(e.id, { overdue, pending, done })
 
-    let validated = 0
+    // "Validés" = real volunteers on the roster. (Account-claim status ACTIF is
+    // not a real acceptance flow yet, so it's not used as the validation axis —
+    // the config contrasts these "validés" with fictional "à rechercher".)
     let total = 0
     for (const m of e.members) {
-      if (m.role !== "BENEVOLE") continue
-      total++
-      if (m.status === "ACTIF") validated++
+      if (m.role === "BENEVOLE") total++
     }
-    volunteerMap.set(e.id, { validated, total })
+    volunteerMap.set(e.id, { validated: total, total })
   }
 
   // Compute stats
