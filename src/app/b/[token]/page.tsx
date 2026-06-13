@@ -283,6 +283,8 @@ export default async function VolunteerPage({ params }: PageProps) {
               height={420}
               showInventory
               initialLogistics={logistics}
+              highlightMemberId={member.id}
+              satelliteDefault={myPostes.length > 0}
             />
           </section>
         )}

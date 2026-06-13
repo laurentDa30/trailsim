@@ -55,6 +55,10 @@ interface Props {
    * link on their own phone.
    */
   initialLogistics?: PlacedLogi[]
+  /** Highlight the postes assigned to this EventMember (the volunteer's own). */
+  highlightMemberId?: string
+  /** Start with the satellite background on. */
+  satelliteDefault?: boolean
 }
 
 const VB_W = 1000
@@ -69,6 +73,10 @@ function isPlaced(lat: number, lng: number): boolean {
 interface Projected {
   project: (lat: number, lng: number) => { x: number; y: number }
   ok: boolean
+  /** Geographic bounds of the drawn data (for a satellite raster background). */
+  bounds: { latMin: number; latMax: number; lngMin: number; lngMax: number } | null
+  /** The data rectangle within the viewBox (where the trace actually lives). */
+  rect: { x: number; y: number; w: number; h: number } | null
 }
 
 /** Equirectangular projection fitted (letter-boxed) into the viewBox. */
@@ -90,7 +98,8 @@ function buildProjection(races: OpMapRace[], zones: OpMapZone[], logistics: Plac
   for (const z of zones) add(z.lat, z.lng)
   for (const l of logistics) add(l.lat, l.lng)
 
-  if (pairs.length < 2) return { project: () => ({ x: VB_W / 2, y: VB_H / 2 }), ok: false }
+  if (pairs.length < 2)
+    return { project: () => ({ x: VB_W / 2, y: VB_H / 2 }), ok: false, bounds: null, rect: null }
 
   const lats = pairs.map((p) => p.lat)
   const lngs = pairs.map((p) => p.lng)
@@ -113,12 +122,41 @@ function buildProjection(races: OpMapRace[], zones: OpMapZone[], logistics: Plac
 
   return {
     ok: true,
+    bounds: { latMin, latMax, lngMin, lngMax },
+    rect: { x: offX, y: offY, w: dx * scale, h: dy * scale },
     project: (lat: number, lng: number) => ({
       x: offX + (lng - lngMin) * kx * scale,
       // invert Y: north is up
       y: offY + (latMax - lat) * scale,
     }),
   }
+}
+
+/**
+ * ESRI World Imagery export URL for an exact lat/lng bbox (public, no key).
+ * Requesting a pixel size with the bbox's own degree aspect makes ESRI return
+ * exactly the bbox (no aspect padding); the SVG <image> then stretches it onto
+ * the kx-corrected data rectangle with preserveAspectRatio="none", which aligns
+ * pixel-for-pixel with the equirectangular projection above.
+ */
+function esriImageryUrl(b: { latMin: number; latMax: number; lngMin: number; lngMax: number }): string {
+  const lngSpan = Math.max(1e-9, b.lngMax - b.lngMin)
+  const latSpan = Math.max(1e-9, b.latMax - b.latMin)
+  const arDeg = lngSpan / latSpan
+  let pxW: number
+  let pxH: number
+  if (arDeg >= 1) {
+    pxW = 1024
+    pxH = Math.max(1, Math.round(1024 / arDeg))
+  } else {
+    pxH = 1024
+    pxW = Math.max(1, Math.round(1024 * arDeg))
+  }
+  const bbox = `${b.lngMin},${b.latMin},${b.lngMax},${b.latMax}`
+  return (
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export' +
+    `?bbox=${bbox}&bboxSR=4326&imageSR=4326&size=${pxW},${pxH}&format=jpg&transparent=false&f=image`
+  )
 }
 
 function nearest(races: OpMapRace[], lat: number, lng: number): { race: OpMapRace; dist: number } | null {
@@ -138,7 +176,8 @@ function nearest(races: OpMapRace[], lat: number, lng: number): { race: OpMapRac
   return best
 }
 
-export function OperationalMap({ simId, races, zones, height = 460, showInventory = true, passageByRace, initialLogistics }: Props) {
+export function OperationalMap({ simId, races, zones, height = 460, showInventory = true, passageByRace, initialLogistics, highlightMemberId, satelliteDefault = false }: Props) {
+  const [satellite, setSatellite] = useState(satelliteDefault)
   // The staffing plan is now durable at the event level: when the server passes
   // it (initialLogistics), use it as the source of truth. Fall back to the old
   // per-sim localStorage only when no server value is provided.
@@ -155,6 +194,11 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
   })
 
   const proj = useMemo(() => buildProjection(races, zones, logistics), [races, zones, logistics])
+
+  const satelliteUrl = useMemo(
+    () => (proj.ok && proj.bounds ? esriImageryUrl(proj.bounds) : null),
+    [proj]
+  )
 
   const width = Math.round(height * (VB_W / VB_H))
 
@@ -174,12 +218,37 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
     <div>
       <div
         style={{
+          position: 'relative',
           border: '1px solid #e5e7eb',
           borderRadius: 10,
           overflow: 'hidden',
           background: '#fcfcfb',
         }}
       >
+        {/* Satellite background toggle */}
+        {satelliteUrl && (
+          <button
+            type="button"
+            onClick={() => setSatellite((v) => !v)}
+            className="no-print"
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 5,
+              padding: '4px 10px',
+              borderRadius: 6,
+              border: '1px solid #d1d5db',
+              background: satellite ? '#111827' : '#fff',
+              color: satellite ? '#fff' : '#374151',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {satellite ? '🛰 Satellite' : 'Fond satellite'}
+          </button>
+        )}
         <svg
           viewBox={`0 0 ${VB_W} ${VB_H}`}
           width="100%"
@@ -193,7 +262,18 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
               <path d="M40 0H0V40" fill="none" stroke="#eef0ee" strokeWidth="1" />
             </pattern>
           </defs>
-          <rect x="0" y="0" width={VB_W} height={VB_H} fill="url(#opgrid)" />
+          {satellite && satelliteUrl && proj.rect ? (
+            <image
+              href={satelliteUrl}
+              x={proj.rect.x}
+              y={proj.rect.y}
+              width={proj.rect.w}
+              height={proj.rect.h}
+              preserveAspectRatio="none"
+            />
+          ) : (
+            <rect x="0" y="0" width={VB_W} height={VB_H} fill="url(#opgrid)" />
+          )}
 
           {!proj.ok && (
             <text x={VB_W / 2} y={VB_H / 2} textAnchor="middle" fill="#9ca3af" fontSize="16">
@@ -276,27 +356,31 @@ export function OperationalMap({ simId, races, zones, height = 460, showInventor
               const { x, y } = proj.project(l.lat, l.lng)
               const meta = logiTypeOf(l.type)
               const name = logiDisplayName(l)
+              const mine = !!highlightMemberId && l.memberId === highlightMemberId
               return (
                 <g key={l.id}>
                   {/* Hover tooltip (browser): name + GPS */}
                   <title>{`${name} — ${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}`}</title>
-                  <circle cx={x} cy={y} r="9" fill={meta.color} stroke="#fff" strokeWidth="2" />
-                  <text x={x} y={y + 3.5} textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">
+                  {mine && (
+                    <circle cx={x} cy={y} r="16" fill="none" stroke="#7CB518" strokeWidth="3.5" />
+                  )}
+                  <circle cx={x} cy={y} r={mine ? 11 : 9} fill={meta.color} stroke="#fff" strokeWidth="2" />
+                  <text x={x} y={y + 3.5} textAnchor="middle" fontSize={mine ? 11 : 10} fontWeight="700" fill="#fff">
                     {meta.letter}
                   </text>
                   {/* Name label, with a white halo for legibility on the trace */}
                   <text
-                    x={x + 12}
+                    x={x + (mine ? 19 : 12)}
                     y={y + 3.5}
-                    fontSize="11"
-                    fontWeight="600"
-                    fill="#1f2937"
+                    fontSize={mine ? 12 : 11}
+                    fontWeight={mine ? 800 : 600}
+                    fill={mine ? '#3f6212' : '#1f2937'}
                     stroke="#fff"
                     strokeWidth="3"
                     paintOrder="stroke"
                     style={{ strokeLinejoin: 'round' }}
                   >
-                    {name}
+                    {mine ? `${name} — VOTRE POSTE` : name}
                   </text>
                 </g>
               )
