@@ -196,6 +196,12 @@ interface LeafletMapProps {
   onRenameLogi?: (id: string, label: string) => void
   /** Numbered display names ("Signaleur 2") keyed by placed-item id. */
   logiNames?: Map<string, string>
+  /** Assigned volunteer name keyed by EventMember id (for poste labels). */
+  memberNames?: Map<string, string>
+  /** Assign (or clear, null) a roster volunteer to a poste from its popup. */
+  onAssignLogi?: (id: string, memberId: string | null) => void
+  /** Roster volunteers available for assignment. */
+  members?: { id: string; name: string }[]
 }
 
 /** Square cyan "R" icon for ravito points placed on the course. */
@@ -319,6 +325,9 @@ export default function LeafletMap({
   onRemoveLogi,
   onRenameLogi,
   logiNames,
+  memberNames,
+  onAssignLogi,
+  members,
 }: LeafletMapProps) {
   // Compute center from first race with points
   const firstPoints = races.find((r) => r.gpxPoints.length > 0)?.gpxPoints
@@ -684,6 +693,7 @@ export default function LeafletMap({
         {showLogistics && placedLogistics.map((logi) => {
           const meta = logiTypeOf(logi.type)
           const name = logiNames?.get(logi.id) ?? logiDisplayName(logi)
+          const assignee = logi.memberId ? memberNames?.get(logi.memberId) : undefined
           return (
             <Marker
               key={logi.id}
@@ -701,6 +711,9 @@ export default function LeafletMap({
               {/* Hover: name + GPS coordinates */}
               <Tooltip direction="top" offset={[0, -10]}>
                 <div style={{ fontWeight: 700, color: meta.color }}>{name}</div>
+                <div style={{ fontSize: 11, color: assignee ? '#15803d' : '#b45309' }}>
+                  {assignee ? `👤 ${assignee}` : 'À pourvoir'}
+                </div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
                   {logi.lat.toFixed(5)}, {logi.lng.toFixed(5)}
                 </div>
@@ -734,6 +747,29 @@ export default function LeafletMap({
                     <div style={{ fontWeight: 700, marginBottom: 4, color: meta.color }}>
                       {name}
                     </div>
+                  )}
+                  {onAssignLogi && members && members.length > 0 && (
+                    <label style={{ display: 'block', margin: '6px 0' }}>
+                      <span style={{ fontSize: 10, color: '#888' }}>Bénévole affecté</span>
+                      <select
+                        defaultValue={assignee ? (logi.memberId as string) : ''}
+                        onChange={(e) => onAssignLogi(logi.id, e.currentTarget.value || null)}
+                        style={{
+                          width: '100%',
+                          marginTop: 2,
+                          padding: '3px 6px',
+                          borderRadius: 6,
+                          border: `1px solid ${assignee ? '#15803d' : '#ccc'}`,
+                          fontSize: 12,
+                          color: assignee ? '#15803d' : '#666',
+                        }}
+                      >
+                        <option value="">— À pourvoir —</option>
+                        {members.map((m) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </label>
                   )}
                   <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
                     {logi.lat.toFixed(5)}, {logi.lng.toFixed(5)}

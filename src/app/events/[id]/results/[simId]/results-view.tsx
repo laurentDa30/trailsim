@@ -373,12 +373,31 @@ export function ResultsView({
     setPlacedLogistics((prev) => prev.map((l) => (l.id === id ? { ...l, label } : l)))
   }, [])
 
+  // Assign (or clear) a roster volunteer to a poste. memberId null = vacant.
+  const assignLogi = useCallback((id: string, memberId: string | null) => {
+    setPlacedLogistics((prev) => prev.map((l) => (l.id === id ? { ...l, memberId } : l)))
+  }, [])
+
   // Count placed logistics per type
   const logiCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const l of placedLogistics) counts[l.type] = (counts[l.type] ?? 0) + 1
     return counts
   }, [placedLogistics])
+
+  // Roster volunteer name lookup (for the assignment dropdown + counts).
+  const memberNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const mem of members) m.set(mem.id, mem.name)
+    return m
+  }, [members])
+
+  // Postes covered by a real volunteer vs still to fill ("à pourvoir").
+  const assignedCount = useMemo(
+    () => placedLogistics.filter((l) => l.memberId && memberNameById.has(l.memberId)).length,
+    [placedLogistics, memberNameById]
+  )
+  const toFillCount = placedLogistics.length - assignedCount
 
   // "Signaleur 1", "Signaleur 2"… so each marker is identifiable on the map
   // and in the staffing list below.
@@ -567,7 +586,10 @@ export function ResultsView({
               onMoveLogi={moveLogi}
               onRemoveLogi={removeLogi}
               onRenameLogi={updateLogiLabel}
+              onAssignLogi={assignLogi}
               logiNames={logiNames}
+              memberNames={memberNameById}
+              members={members}
             />
 
             {/* Course legend — colour = course, with live on-course count */}
@@ -1218,47 +1240,87 @@ export function ResultsView({
                 })}
               </div>
 
+              {/* Coverage summary */}
+              {placedLogistics.length > 0 && (
+                <div className="text-[11px] flex flex-wrap items-center gap-x-2" style={{ color: 'var(--color-ink-4)' }}>
+                  <b style={{ color: 'var(--color-ink-2)' }}>{placedLogistics.length}</b> poste
+                  {placedLogistics.length > 1 ? 's' : ''} ·{' '}
+                  <span style={{ color: 'var(--color-lime)' }}>{assignedCount} affecté{assignedCount > 1 ? 's' : ''}</span>
+                  {toFillCount > 0 && (
+                    <>
+                      {' · '}
+                      <span style={{ color: 'var(--color-warning)' }}>{toFillCount} à pourvoir</span>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Placed list */}
               {placedLogistics.length > 0 && (
-                <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: 'var(--color-line)' }}>
+                <div className="flex flex-col pt-1 border-t" style={{ borderColor: 'var(--color-line)' }}>
                   {placedLogistics.map((l) => {
                     const meta = logiTypeOf(l.type)
+                    const assignedKnown = l.memberId && memberNameById.has(l.memberId)
                     return (
-                      <div key={l.id} className="flex items-center gap-2 px-1 py-1">
-                        <span
-                          className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold text-white"
-                          style={{ background: meta.color }}
-                          title={meta.label}
-                        >
-                          {meta.letter}
-                        </span>
-                        <input
-                          type="text"
-                          value={l.label ?? ''}
-                          placeholder={logiNames.get(l.id) ?? meta.label}
-                          onChange={(e) => updateLogiLabel(l.id, e.target.value)}
-                          className="flex-1 min-w-0 bg-transparent text-xs px-1 py-0.5 rounded border border-transparent focus:outline-none focus:border-[var(--color-line)] focus:bg-[var(--color-bg-2)] transition-colors"
-                          style={{ color: 'var(--color-ink-2)' }}
-                          title={`${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}`}
-                        />
-                        <span
-                          className="text-[10px] font-mono shrink-0"
-                          style={{ color: 'var(--color-ink-4)' }}
-                        >
-                          {l.lat.toFixed(3)}, {l.lng.toFixed(3)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeLogi(l.id)}
-                          style={{ color: 'var(--color-ink-4)' }}
-                          aria-label="Supprimer"
-                          className="hover:text-[var(--color-danger)] transition-colors shrink-0"
-                        >
-                          <Trash2Icon size={12} />
-                        </button>
+                      <div key={l.id} className="flex flex-col gap-1 px-1 py-1.5 border-b last:border-0" style={{ borderColor: 'var(--color-line)' }}>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold text-white"
+                            style={{ background: meta.color }}
+                            title={meta.label}
+                          >
+                            {meta.letter}
+                          </span>
+                          <input
+                            type="text"
+                            value={l.label ?? ''}
+                            placeholder={logiNames.get(l.id) ?? meta.label}
+                            onChange={(e) => updateLogiLabel(l.id, e.target.value)}
+                            className="flex-1 min-w-0 bg-transparent text-xs px-1 py-0.5 rounded border border-transparent focus:outline-none focus:border-[var(--color-line)] focus:bg-[var(--color-bg-2)] transition-colors"
+                            style={{ color: 'var(--color-ink-2)' }}
+                            title={`${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeLogi(l.id)}
+                            style={{ color: 'var(--color-ink-4)' }}
+                            aria-label="Supprimer"
+                            className="hover:text-[var(--color-danger)] transition-colors shrink-0"
+                          >
+                            <Trash2Icon size={12} />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 pl-6">
+                          <select
+                            value={assignedKnown ? (l.memberId as string) : ''}
+                            onChange={(e) => assignLogi(l.id, e.target.value || null)}
+                            className="flex-1 min-w-0 text-[11px] rounded px-1 py-0.5 transition-colors focus:outline-none"
+                            style={{
+                              background: 'var(--color-bg-2)',
+                              border: `1px solid ${assignedKnown ? 'color-mix(in srgb, var(--color-lime) 40%, transparent)' : 'var(--color-line)'}`,
+                              color: assignedKnown ? 'var(--color-ink-2)' : 'var(--color-ink-4)',
+                            }}
+                          >
+                            <option value="">— À pourvoir —</option>
+                            {members.map((m) => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
+                          <span
+                            className="text-[10px] font-mono shrink-0"
+                            style={{ color: 'var(--color-ink-4)' }}
+                          >
+                            {l.lat.toFixed(3)}, {l.lng.toFixed(3)}
+                          </span>
+                        </div>
                       </div>
                     )
                   })}
+                  {members.length === 0 && (
+                    <p className="text-[10px] mt-1.5" style={{ color: 'var(--color-ink-4)' }}>
+                      Ajoutez des bénévoles depuis l&apos;onglet Équipe pour pouvoir les affecter aux postes.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

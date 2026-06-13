@@ -2,7 +2,7 @@ import Link from 'next/link'
 import db from '@/lib/db'
 import type { GPXPoint } from '@/engine/types'
 import { OperationalMap, type OpMapRace } from '../../events/[id]/report/[simId]/operational-map'
-import type { PlacedLogi } from '@/lib/logistics'
+import { logiTypeOf, logiNumberedNames, type PlacedLogi } from '@/lib/logistics'
 
 interface PageProps {
   params: Promise<{ token: string }>
@@ -87,6 +87,9 @@ export default async function VolunteerPage({ params }: PageProps) {
       logistics = []
     }
   }
+  // Postes assigned to this volunteer (their personal job on the day).
+  const logiNames = logiNumberedNames(logistics)
+  const myPostes = logistics.filter((l) => l.memberId === member.id)
 
   const mapRaces: OpMapRace[] = event.races.map((r) => {
     let gpxPoints: GPXPoint[] = []
@@ -169,6 +172,46 @@ export default async function VolunteerPage({ params }: PageProps) {
             </div>
           )}
         </header>
+
+        {/* Votre poste — the volunteer's personal assignment on the day */}
+        {myPostes.length > 0 && (
+          <section
+            className="rounded-xl p-4"
+            style={{
+              background: 'color-mix(in oklab, var(--color-lime) 8%, var(--color-bg-1))',
+              border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
+            }}
+          >
+            <h2 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-ink)' }}>
+              Votre poste{myPostes.length > 1 ? 's' : ''}
+            </h2>
+            <div className="flex flex-col gap-1.5">
+              {myPostes.map((l) => {
+                const meta = logiTypeOf(l.type)
+                return (
+                  <div
+                    key={l.id}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                    style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
+                  >
+                    <span
+                      className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold text-white"
+                      style={{ background: meta.color }}
+                    >
+                      {meta.letter}
+                    </span>
+                    <span className="font-medium" style={{ color: 'var(--color-ink)' }}>
+                      {logiNames.get(l.id) ?? meta.label}
+                    </span>
+                    <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--color-ink-4)' }}>
+                      {l.lat.toFixed(4)}, {l.lng.toFixed(4)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Courses */}
         <section
