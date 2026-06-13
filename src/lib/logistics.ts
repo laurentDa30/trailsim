@@ -12,6 +12,9 @@ export interface PlacedLogi {
   lng: number
   /** Optional custom name overriding the type label (e.g. "Poste croix 4×4"). */
   label?: string
+  /** Assigned EventMember id, or null/undefined when the poste is still vacant
+   *  ("à pourvoir"). */
+  memberId?: string | null
 }
 
 export const LOGI_TYPES: LogiType[] = [

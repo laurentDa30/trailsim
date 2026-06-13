@@ -69,6 +69,11 @@ model Event {
   members     EventMember[]
   partners    Partner[]
   tasks       Task[]
+  // Field staffing plan (postes), durable at the event level so it survives
+  // across simulations and trace edits. JSON: PlacedLogi[] (geo coords +
+  // optional assigned EventMember). If a trace changes, a poste keeps its
+  // lat/lng — the organiser deletes & re-places it if it no longer fits.
+  implantation String      @default("[]")
 }
 
 // Organisation checklist item with an optional deadline (déclaration préfecture,

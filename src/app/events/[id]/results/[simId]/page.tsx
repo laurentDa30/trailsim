@@ -38,6 +38,17 @@ export default async function ResultsPage({ params }: PageProps) {
     simulation.gpxSnapshot
   )
 
+  // Event-level staffing plan + volunteer roster (for poste assignment).
+  const eventRow = await db.event.findUnique({
+    where: { id },
+    select: { implantation: true },
+  })
+  const members = await db.eventMember.findMany({
+    where: { eventId: id, role: "BENEVOLE" },
+    select: { id: true, name: true, raceIds: true },
+    orderBy: { name: "asc" },
+  })
+
   // Parse resultSnapshot
   let result: CompressedSimulationResult | null = null
   if (simulation.resultSnapshot) {
@@ -97,6 +108,8 @@ export default async function ResultsPage({ params }: PageProps) {
       }}
       result={result}
       races={parsedRaces}
+      implantation={eventRow?.implantation ?? '[]'}
+      members={members.map((m) => ({ id: m.id, name: m.name, raceIds: m.raceIds }))}
       runnerProfiles={simulation.runnerProfiles.map((p) => ({
         id: p.id,
         label: p.label,

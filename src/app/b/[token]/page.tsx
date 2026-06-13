@@ -75,10 +75,14 @@ export default async function VolunteerPage({ params }: PageProps) {
 
   const event = member.event
   const sim = event.simulations[0] ?? null
+  // Event-level staffing plan, falling back to the latest sim's saved config
+  // for events created before the event-level plan existed.
   let logistics: PlacedLogi[] = []
-  if (sim?.logistique) {
+  const implantationSrc =
+    event.implantation && event.implantation !== '[]' ? event.implantation : sim?.logistique
+  if (implantationSrc) {
     try {
-      logistics = JSON.parse(sim.logistique) as PlacedLogi[]
+      logistics = JSON.parse(implantationSrc) as PlacedLogi[]
     } catch {
       logistics = []
     }

@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
 import { applyTraceSnapshot } from '@/lib/sim-snapshot'
+import type { PlacedLogi } from '@/lib/logistics'
 import { clusterRiskZones, computePassageByKmBin, type RaceLite, type PassageBin } from '@/lib/report-metrics'
 import type { OpMapRace, OpMapZone } from '../../report/[simId]/operational-map'
 import { TerrainView } from './terrain-view'
@@ -87,6 +88,19 @@ export default async function TerrainPage({ params }: PageProps) {
   const passageByRace: Record<string, PassageBin[]> = {}
   if (result) for (const r of racesLite) passageByRace[r.id] = computePassageByKmBin(result, r)
 
+  // Event-level staffing plan (fallback: this sim's saved config for old events).
+  const fieldLogistics: PlacedLogi[] = (() => {
+    const src =
+      sim.event.implantation && sim.event.implantation !== '[]'
+        ? sim.event.implantation
+        : sim.logistique
+    try {
+      return src ? (JSON.parse(src) as PlacedLogi[]) : []
+    } catch {
+      return []
+    }
+  })()
+
   return (
     <TerrainView
       eventId={id}
@@ -96,6 +110,7 @@ export default async function TerrainPage({ params }: PageProps) {
       races={mapRaces}
       zones={mapZones}
       passageByRace={passageByRace}
+      logistics={fieldLogistics}
     />
   )
 }

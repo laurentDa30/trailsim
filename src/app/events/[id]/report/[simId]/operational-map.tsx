@@ -139,16 +139,19 @@ function nearest(races: OpMapRace[], lat: number, lng: number): { race: OpMapRac
 }
 
 export function OperationalMap({ simId, races, zones, height = 460, showInventory = true, passageByRace, initialLogistics }: Props) {
-  // Placed logistics live in the browser (localStorage), seeded at config time.
+  // The staffing plan is now durable at the event level: when the server passes
+  // it (initialLogistics), use it as the source of truth. Fall back to the old
+  // per-sim localStorage only when no server value is provided.
   const [logistics] = useState<PlacedLogi[]>(() => {
-    if (typeof window === 'undefined') return initialLogistics ?? []
+    if (initialLogistics !== undefined) return initialLogistics
+    if (typeof window === 'undefined') return []
     try {
       const raw = localStorage.getItem(logiStorageKey(simId))
       if (raw) return JSON.parse(raw) as PlacedLogi[]
     } catch {
       /* ignore */
     }
-    return initialLogistics ?? []
+    return []
   })
 
   const proj = useMemo(() => buildProjection(races, zones, logistics), [races, zones, logistics])

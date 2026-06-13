@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { OperationalMap, type OpMapRace, type OpMapZone } from '../../report/[simId]/operational-map'
 import type { PassageBin } from '@/lib/report-metrics'
+import type { PlacedLogi } from '@/lib/logistics'
 
 interface Props {
   eventId: string
@@ -12,6 +13,7 @@ interface Props {
   races: OpMapRace[]
   zones: OpMapZone[]
   passageByRace?: Record<string, PassageBin[]>
+  logistics?: PlacedLogi[]
 }
 
 const btnBase: React.CSSProperties = {
@@ -26,7 +28,7 @@ const btnBase: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-export function TerrainView({ eventId, simId, eventName, simName, races, zones, passageByRace }: Props) {
+export function TerrainView({ eventId, simId, eventName, simName, races, zones, passageByRace, logistics }: Props) {
   const [showInventory, setShowInventory] = useState(true)
 
   return (
@@ -94,7 +96,7 @@ export function TerrainView({ eventId, simId, eventName, simName, races, zones, 
           <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Plan d&apos;implantation — jour J</h1>
           <span style={{ fontSize: 12, color: '#9ca3af' }}>{eventName}</span>
         </div>
-        <OperationalMap simId={simId} races={races} zones={zones} passageByRace={passageByRace} height={620} showInventory={showInventory} />
+        <OperationalMap simId={simId} races={races} zones={zones} passageByRace={passageByRace} height={620} showInventory={showInventory} initialLogistics={logistics} />
       </div>
     </div>
   )

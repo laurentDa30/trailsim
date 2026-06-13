@@ -8,7 +8,6 @@ import { Timeline } from './timeline'
 import { Topbar } from '@/components/layout/topbar'
 import {
   LOGI_TYPES,
-  logiStorageKey,
   logiTypeOf,
   logiNumberedNames,
   type PlacedLogi,
@@ -57,6 +56,10 @@ export interface ResultsViewProps {
     racesSnapshot?: string | null
   }
   result: CompressedSimulationResult | null
+  /** Event-level staffing plan (JSON PlacedLogi[]); durable across simulations. */
+  implantation?: string
+  /** Volunteer roster (role BENEVOLE) for poste assignment. */
+  members?: { id: string; name: string; raceIds: string }[]
   races: {
     id: string
     name: string
@@ -236,6 +239,8 @@ export function ResultsView({
   result,
   races,
   runnerProfiles,
+  implantation,
+  members = [],
 }: ResultsViewProps) {
   const [visibleRaces, setVisibleRaces] = useState<Set<string>>(
     () => new Set(races.map((r) => r.id))
@@ -299,17 +304,19 @@ export function ResultsView({
   const [hoverPoint, setHoverPoint] = useState<[number, number] | null>(null)
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // --- Logistics: seeded from the configuration (simulation.logistique),
-  // with local tweaks persisted to localStorage per simulation ---
+  // --- Logistics (implantation): durable at the EVENT level. Seeded from the
+  // event plan, falling back to this simulation's saved config for events that
+  // predate the event-level store. Persisted to the event via the API (debounced). ---
   const [placedLogistics, setPlacedLogistics] = useState<PlacedLogi[]>(() => {
-    if (typeof window === 'undefined') return []
     try {
-      const raw = localStorage.getItem(logiStorageKey(simulation.id))
-      if (raw) return JSON.parse(raw) as PlacedLogi[]
+      if (implantation) {
+        const arr = JSON.parse(implantation) as PlacedLogi[]
+        if (Array.isArray(arr) && arr.length > 0) return arr
+      }
     } catch {
       /* ignore */
     }
-    // Fall back to the logistics defined during configuration
+    // Back-compat: events with no event-level plan yet inherit this sim's config.
     try {
       if (simulation.logistique) return JSON.parse(simulation.logistique) as PlacedLogi[]
     } catch {
@@ -319,13 +326,25 @@ export function ResultsView({
   })
   const [placementType, setPlacementType] = useState<string | null>(null)
 
+  // Persist the event-level implantation (debounced). Skip the very first run so
+  // we don't immediately re-save the freshly loaded plan.
+  const implantationLoaded = useRef(false)
   useEffect(() => {
-    try {
-      localStorage.setItem(logiStorageKey(simulation.id), JSON.stringify(placedLogistics))
-    } catch {
-      /* quota */
+    if (!implantationLoaded.current) {
+      implantationLoaded.current = true
+      return
     }
-  }, [placedLogistics, simulation.id])
+    const t = setTimeout(() => {
+      fetch(`/api/events/${event.id}/implantation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ implantation: placedLogistics }),
+      }).catch(() => {
+        /* best-effort; will retry on next change */
+      })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [placedLogistics, event.id])
 
   const placeLogi = useCallback(
     (lat: number, lng: number) => {

@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
 import { applyTraceSnapshot } from '@/lib/sim-snapshot'
+import type { PlacedLogi } from '@/lib/logistics'
 import {
   clusterRiskZones,
   clusterCollisionWindows,
@@ -202,6 +203,19 @@ export default async function ReportPage({ params }: PageProps) {
         : null
   }
   const finishFlow = result ? computeFinishFlow(result, racesLite, 600, cutoffByRace) : null
+
+  // Event-level staffing plan (fallback: this sim's saved config for old events).
+  const fieldLogistics: PlacedLogi[] = (() => {
+    const src =
+      sim.event.implantation && sim.event.implantation !== '[]'
+        ? sim.event.implantation
+        : sim.logistique
+    try {
+      return src ? (JSON.parse(src) as PlacedLogi[]) : []
+    } catch {
+      return []
+    }
+  })()
   // T0 wall-clock anchor for real arrival times (null → show T+ offsets).
   const startClock: string | null = sim.event.startClock ?? null
   // FEATURE 2 — per-km passage windows for poste staffing (passed to the map).
@@ -650,7 +664,7 @@ export default async function ReportPage({ params }: PageProps) {
           à déployer le jour J. Chaque poste indique son créneau d&apos;activité (1er → dernier coureur).
         </p>
         <div className="avoid-break">
-          <OperationalMap simId={simId} races={mapRaces} zones={mapZones} passageByRace={passageByRace} height={460} showInventory />
+          <OperationalMap simId={simId} races={mapRaces} zones={mapZones} passageByRace={passageByRace} height={460} showInventory initialLogistics={fieldLogistics} />
         </div>
 
         {/* ── CONDITIONS & CONFIG ── */}
