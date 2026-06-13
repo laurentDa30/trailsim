@@ -79,6 +79,125 @@ function daysUntil(iso: string): number {
 // Pipeline display order.
 const STATUS_ORDER = ['EN_COURS', 'EN_ATTENTE', 'IMPOSSIBLE', 'VALIDE'] as const
 
+interface TaskEditValues {
+  title: string
+  category: string
+  dueDate: string | null
+  amountEstimated: number | null
+  amountActual: number | null
+}
+
+/**
+ * Inline task editor with its OWN local state, defined at module scope so it
+ * stays mounted while typing — otherwise every keystroke re-rendered the whole
+ * list and the title's autoFocus stole focus from the amount inputs.
+ */
+function TaskEditRow({
+  task,
+  depth,
+  onSave,
+  onCancel,
+}: {
+  task: { title: string; category: string; dueDate: string | null; amountEstimated: number | null; amountActual: number | null }
+  depth: number
+  onSave: (v: TaskEditValues) => void
+  onCancel: () => void
+}) {
+  const [title, setTitle] = useState(task.title)
+  const [category, setCategory] = useState(task.category)
+  const [dueLocal, setDueLocal] = useState(task.dueDate ? task.dueDate.slice(0, 10) : '')
+  const [est, setEst] = useState(task.amountEstimated != null ? String(task.amountEstimated) : '')
+  const [act, setAct] = useState(task.amountActual != null ? String(task.amountActual) : '')
+
+  function submit() {
+    onSave({
+      title: title.trim(),
+      category,
+      dueDate: dueLocal ? new Date(`${dueLocal}T12:00:00`).toISOString() : null,
+      amountEstimated: est.trim() === '' ? null : Math.max(0, Number(est)),
+      amountActual: act.trim() === '' ? null : Math.max(0, Number(act)),
+    })
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-lg px-3 py-2"
+      style={{
+        marginLeft: depth * 22,
+        background: 'var(--color-bg-2)',
+        border: '1px solid color-mix(in oklab, var(--color-lime) 40%, var(--color-line))',
+      }}
+    >
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        autoFocus
+        className="flex-1 min-w-[160px] px-2 py-1 rounded text-xs"
+        style={inputStyle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') submit()
+          if (e.key === 'Escape') onCancel()
+        }}
+      />
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        className="px-1.5 py-1 rounded text-[11px]"
+        style={inputStyle}
+      >
+        {TASK_CATEGORIES.map((c) => (
+          <option key={c.value} value={c.value}>{c.label}</option>
+        ))}
+      </select>
+      <input
+        type="date"
+        value={dueLocal}
+        onChange={(e) => setDueLocal(e.target.value)}
+        className="px-1.5 py-1 rounded text-[11px]"
+        style={inputStyle}
+      />
+      <input
+        type="number"
+        min={0}
+        value={est}
+        onChange={(e) => setEst(e.target.value)}
+        placeholder="Estimé €"
+        className="w-24 px-1.5 py-1 rounded text-[11px]"
+        style={inputStyle}
+      />
+      <input
+        type="number"
+        min={0}
+        value={act}
+        onChange={(e) => setAct(e.target.value)}
+        placeholder="Réel €"
+        className="w-24 px-1.5 py-1 rounded text-[11px]"
+        style={inputStyle}
+      />
+      <button
+        type="button"
+        onClick={submit}
+        className="px-2.5 py-1 rounded text-[11px] font-medium"
+        style={{
+          background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)',
+          color: 'var(--color-lime)',
+          border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
+        }}
+      >
+        OK
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="px-2 py-1 rounded text-[11px]"
+        style={{ color: 'var(--color-ink-4)' }}
+      >
+        Annuler
+      </button>
+    </div>
+  )
+}
+
 // ── Calendar date helpers ──
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const MONTH_LABELS = [
@@ -152,13 +271,10 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
     return { est, act, hasAny }
   }, [tasks])
 
-  // Inline edit state (one task at a time) — title, category, date, amounts, note.
+  // Inline edit: only the id is parent state; the form fields live in the
+  // stable TaskEditRow component (local state) so typing doesn't re-render the
+  // whole list and steal focus.
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [eTitle, setETitle] = useState('')
-  const [eCategory, setECategory] = useState('GENERAL')
-  const [eDue, setEDue] = useState('')
-  const [eEst, setEEst] = useState('')
-  const [eAct, setEAct] = useState('')
 
   // Quick "add sub-task" state (one parent at a time)
   const [subFor, setSubFor] = useState<string | null>(null)
@@ -230,33 +346,31 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
 
   function startEdit(t: Task) {
     setEditingId(t.id)
-    setETitle(t.title)
-    setECategory(t.category)
-    setEDue(t.dueDate ? t.dueDate.slice(0, 10) : '')
-    setEEst(t.amountEstimated != null ? String(t.amountEstimated) : '')
-    setEAct(t.amountActual != null ? String(t.amountActual) : '')
   }
 
-  async function saveEdit() {
-    if (!editingId || !eTitle.trim()) return
-    const dueIso = eDue ? new Date(`${eDue}T12:00:00`).toISOString() : null
-    const est = eEst.trim() === '' ? null : Math.max(0, Number(eEst))
-    const act = eAct.trim() === '' ? null : Math.max(0, Number(eAct))
+  async function saveEdit(id: string, v: TaskEditValues) {
+    if (!v.title.trim()) return
     setTasks((prev) =>
       prev.map((t) =>
-        t.id === editingId
-          ? { ...t, title: eTitle.trim(), category: eCategory, dueDate: dueIso, amountEstimated: est, amountActual: act }
+        t.id === id
+          ? {
+              ...t,
+              title: v.title.trim(),
+              category: v.category,
+              dueDate: v.dueDate,
+              amountEstimated: v.amountEstimated,
+              amountActual: v.amountActual,
+            }
           : t
       )
     )
-    const id = editingId
     setEditingId(null)
     await patch(id, {
-      title: eTitle.trim(),
-      category: eCategory,
-      dueDate: dueIso,
-      amountEstimated: est,
-      amountActual: act,
+      title: v.title.trim(),
+      category: v.category,
+      dueDate: v.dueDate,
+      amountEstimated: v.amountEstimated,
+      amountActual: v.amountActual,
     })
   }
 
@@ -291,81 +405,12 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
 
     if (editingId === t.id) {
       return (
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-lg px-3 py-2"
-          style={{
-            marginLeft: depth * 22,
-            background: 'var(--color-bg-2)',
-            border: '1px solid color-mix(in oklab, var(--color-lime) 40%, var(--color-line))',
-          }}
-        >
-          <input
-            value={eTitle}
-            onChange={(e) => setETitle(e.target.value)}
-            autoFocus
-            className="flex-1 min-w-[160px] px-2 py-1 rounded text-xs"
-            style={inputStyle}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveEdit()
-              if (e.key === 'Escape') setEditingId(null)
-            }}
-          />
-          <select
-            value={eCategory}
-            onChange={(e) => setECategory(e.target.value)}
-            className="px-1.5 py-1 rounded text-[11px]"
-            style={inputStyle}
-          >
-            {TASK_CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={eDue}
-            onChange={(e) => setEDue(e.target.value)}
-            className="px-1.5 py-1 rounded text-[11px]"
-            style={inputStyle}
-          />
-          <input
-            type="number"
-            min={0}
-            value={eEst}
-            onChange={(e) => setEEst(e.target.value)}
-            placeholder="Estimé €"
-            className="w-24 px-1.5 py-1 rounded text-[11px]"
-            style={inputStyle}
-          />
-          <input
-            type="number"
-            min={0}
-            value={eAct}
-            onChange={(e) => setEAct(e.target.value)}
-            placeholder="Réel €"
-            className="w-24 px-1.5 py-1 rounded text-[11px]"
-            style={inputStyle}
-          />
-          <button
-            type="button"
-            onClick={saveEdit}
-            className="px-2.5 py-1 rounded text-[11px] font-medium"
-            style={{
-              background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)',
-              color: 'var(--color-lime)',
-              border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
-            }}
-          >
-            OK
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditingId(null)}
-            className="px-2 py-1 rounded text-[11px]"
-            style={{ color: 'var(--color-ink-4)' }}
-          >
-            Annuler
-          </button>
-        </div>
+        <TaskEditRow
+          task={t}
+          depth={depth}
+          onSave={(v) => saveEdit(t.id, v)}
+          onCancel={() => setEditingId(null)}
+        />
       )
     }
 
