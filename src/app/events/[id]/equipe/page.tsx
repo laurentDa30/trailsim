@@ -29,7 +29,7 @@ export default async function EquipePage({ params }: PageProps) {
   })
   if (!event) notFound()
 
-  const [members, partners] = await Promise.all([
+  const [members, partners, sections] = await Promise.all([
     db.eventMember.findMany({
       where: { eventId: id },
       orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
@@ -37,6 +37,10 @@ export default async function EquipePage({ params }: PageProps) {
     db.partner.findMany({
       where: { eventId: id },
       orderBy: [{ kind: 'asc' }, { createdAt: 'asc' }],
+    }),
+    db.section.findMany({
+      where: { eventId: id },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     }),
   ])
 
@@ -66,6 +70,7 @@ export default async function EquipePage({ params }: PageProps) {
           status: m.status,
           inviteToken: m.inviteToken,
           raceIds,
+          sectionId: m.sectionId,
           note: m.note,
         }
       })}
@@ -77,6 +82,12 @@ export default async function EquipePage({ params }: PageProps) {
         email: p.email,
         phone: p.phone,
         note: p.note,
+      }))}
+      initialSections={sections.map((s) => ({
+        id: s.id,
+        name: s.name,
+        color: s.color,
+        responsibleId: s.responsibleId,
       }))}
       canEdit={canManage(access)}
     />
