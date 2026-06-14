@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon, LogOut } from 'lucide-react'
-import { signOut } from 'next-auth/react'
-import { useState, useRef, useEffect } from 'react'
+import { signOut, useSession } from 'next-auth/react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { PageNav, MobileNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
 
@@ -37,11 +37,26 @@ export function Topbar({
   eventLocation,
   status,
   exportHref,
-  userInitials = 'OR',
+  userInitials,
 }: TopbarProps) {
   const st = status ? STATUS[status] : null
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // Derive avatar initials from the signed-in user (name → "JD", else email).
+  const { data: sessionData } = useSession()
+  const initials = useMemo(() => {
+    if (userInitials) return userInitials
+    const name = sessionData?.user?.name?.trim()
+    if (name) {
+      const parts = name.split(/\s+/).filter(Boolean)
+      const ii = (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : '')
+      if (ii) return ii.toUpperCase()
+    }
+    const email = sessionData?.user?.email
+    if (email) return email.slice(0, 2).toUpperCase()
+    return 'OR'
+  }, [userInitials, sessionData])
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -189,7 +204,7 @@ export function Topbar({
           aria-label="Compte"
           aria-expanded={menuOpen}
         >
-          {userInitials}
+          {initials}
         </button>
 
         {menuOpen && (
