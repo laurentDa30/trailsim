@@ -633,7 +633,7 @@ export function EquipeView({
 
         {/* ── Synthesis (right) ── */}
         <aside
-          className="w-full lg:w-[320px] shrink-0 p-4 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l lg:sticky lg:top-0 lg:max-h-screen lg:overflow-y-auto"
+          className="w-full lg:w-[320px] shrink-0 p-4 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l lg:sticky lg:top-[52px] lg:max-h-[calc(100vh-52px)] lg:overflow-y-auto"
           style={{ background: 'var(--color-bg-1)', borderColor: 'var(--color-line)' }}
         >
           <div className="flex items-center gap-2">

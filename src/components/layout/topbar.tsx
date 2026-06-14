@@ -68,7 +68,7 @@ export function Topbar({
 
   return (
     <header
-      className="relative flex items-center gap-3 px-4 shrink-0"
+      className="sticky top-0 flex items-center gap-3 px-4 shrink-0"
       style={{
         height: 52,
         background: 'var(--color-bg-1)',
