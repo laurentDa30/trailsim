@@ -30,10 +30,13 @@ const COLOR_SWATCHES = [
 
 const START_TIMES = [
   { label: 'T0', value: 0 },
-  { label: 'T+30 min', value: 30 },
-  { label: 'T+60 min', value: 60 },
-  { label: 'T+90 min', value: 90 },
-  { label: 'T+2h', value: 120 },
+  { label: '+15', value: 15 },
+  { label: '+30', value: 30 },
+  { label: '+45', value: 45 },
+  { label: '+1h', value: 60 },
+  { label: '+1h15', value: 75 },
+  { label: '+1h30', value: 90 },
+  { label: '+2h', value: 120 },
 ]
 
 interface GpxState {
@@ -319,7 +322,7 @@ export function Step1Courses({
                 {/* Start time */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-[var(--color-ink-3)]">Départ</span>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {START_TIMES.map((t) => (
                       <button
                         key={t.value}

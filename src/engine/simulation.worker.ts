@@ -184,6 +184,17 @@ async function runSimulation(config: SimConfig): Promise<void> {
         createRunnersFromProfiles(profiles, raceId, totalRunners)
       )
 
+      // Start-line crossing: a mass start is NOT instantaneous. The field crosses
+      // the line progressively (≈ START_RATE runners/s through the start corridor),
+      // so runners are released over a short window instead of all piling onto the
+      // first 200 m at once (which jammed the whole field for hours). Front runners
+      // (spawned first, fastest profiles) cross first.
+      const START_RATE = 3 // runners crossing the start line per second
+      const MAX_START_SPREAD = 12 * 60 // cap the release window at 12 min
+      const raceRunnerCount = new Map<string, number>()
+      for (const r of allRunners) raceRunnerCount.set(r.raceId, (raceRunnerCount.get(r.raceId) ?? 0) + 1)
+      const raceRank = new Map<string, number>()
+
       // Initialise runner states, keyed by runnerId
       const stateMap = new Map<string, RunnerState>()
       for (const runner of allRunners) {
@@ -191,6 +202,13 @@ async function runSimulation(config: SimConfig): Promise<void> {
         // Harsh conditions raise the abandon probability.
         const abandonProb = Math.min(0.9, runner.abandonRate * weatherAbandonMult)
         const willAbandon = rand() < abandonProb
+
+        const cnt = raceRunnerCount.get(runner.raceId) ?? 1
+        const rank = raceRank.get(runner.raceId) ?? 0
+        raceRank.set(runner.raceId, rank + 1)
+        const spread = Math.min(MAX_START_SPREAD, cnt / START_RATE)
+        const startDelay = cnt > 1 ? (rank / (cnt - 1)) * spread : 0
+
         stateMap.set(runner.id, {
           position: 0,
           distanceDone: 0,
@@ -201,6 +219,7 @@ async function runSimulation(config: SimConfig): Promise<void> {
           abandoned: false,
           abandonAt: willAbandon ? 0.3 + rand() * 0.65 : Infinity,
           atRavito: 0,
+          startDelay,
         })
       }
 
@@ -247,9 +266,9 @@ async function runSimulation(config: SimConfig): Promise<void> {
           const raceMet = raceMeta.find((m) => m.race.id === runner.raceId)!
           const { race } = raceMet
 
-          // Check if this runner has started (accounting for wave start offsets)
+          // Check if this runner has started (race start + own start-line crossing)
           const raceStartTime = race.startOffset
-          if (globalTime < raceStartTime) continue
+          if (globalTime < raceStartTime + state.startDelay) continue
 
           const pts = race.gpxPoints
           if (pts.length === 0) continue
@@ -268,8 +287,8 @@ async function runSimulation(config: SimConfig): Promise<void> {
           const { race, totalDist, totalElevGain, segmentCapacities, techMult, smoothSlope } = raceMet
 
           const raceStartTime = race.startOffset
-          if (globalTime < raceStartTime) {
-            // Not yet started — record position 0
+          if (globalTime < raceStartTime + state.startDelay) {
+            // Not yet across the start line — record position 0
             if (isLastRun && lastRunTrajectories) {
               lastRunTrajectories.get(runner.id)![tIdx] = 0
             }

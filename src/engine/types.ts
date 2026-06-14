@@ -46,6 +46,7 @@ export interface RunnerState {
   abandoned: boolean
   abandonAt: number     // 0-1 position where this runner DNFs (>1 = finishes)
   atRavito: number      // seconds remaining at ravito stop
+  startDelay: number    // seconds after the race start before this runner crosses the line
 }
 
 export interface Constraint {
