@@ -442,7 +442,7 @@ export function EquipeView({
   }
 
   return (
-    <div className="h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
+    <div className="flex flex-col min-h-screen lg:h-screen" style={{ background: 'var(--color-bg)' }}>
       <Topbar
         activePage="equipe"
         eventId={event.id}
@@ -451,9 +451,9 @@ export function EquipeView({
         eventDate={event.date ? fmtDate(event.date) : undefined}
       />
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+      <div className="flex-1 flex flex-col lg:flex-row lg:min-h-0">
         {/* ── Management (left) ── */}
-        <div className="flex-1 min-w-0 overflow-y-auto p-4 flex flex-col gap-4">
+        <div className="flex-1 min-w-0 lg:min-h-0 lg:overflow-y-auto p-4 flex flex-col gap-4">
           {/* Add member */}
           {canEdit && (
             <form
@@ -633,7 +633,7 @@ export function EquipeView({
 
         {/* ── Synthesis (right) ── */}
         <aside
-          className="w-full lg:w-[320px] shrink-0 overflow-y-auto p-4 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l"
+          className="w-full lg:w-[320px] shrink-0 lg:min-h-0 lg:overflow-y-auto p-4 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l"
           style={{ background: 'var(--color-bg-1)', borderColor: 'var(--color-line)' }}
         >
           <div className="flex items-center gap-2">

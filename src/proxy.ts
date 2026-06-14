@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-// "/b/" is the volunteers' token-link view: access IS the token, no account.
-const PUBLIC_PATHS = ["/login", "/register", "/api/auth", "/b/"]
+// "/b/" is the volunteers' token-link view and "/invite/" the organiser access
+// link (set/enter password): access IS the token, no prior session needed.
+const PUBLIC_PATHS = ["/login", "/register", "/api/auth", "/api/invite", "/b/", "/invite/"]
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
