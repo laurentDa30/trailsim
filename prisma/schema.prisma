@@ -71,6 +71,7 @@ model Event {
   members     EventMember[]
   partners    Partner[]
   tasks       Task[]
+  sections    Section[]
   // Field staffing plan (postes), durable at the event level so it survives
   // across simulations and trace edits. JSON: PlacedLogi[] (geo coords +
   // optional assigned EventMember). If a trace changes, a poste keeps its
@@ -123,12 +124,30 @@ model EventMember {
   // INVITE (created, link not claimed) | ACTIF (claimed by a user account)
   status      String   @default("INVITE")
   inviteToken String   @unique @default(cuid())
+  // Section (pôle) this volunteer is assigned to (plain Section id ref; resolved
+  // in the UI so deleting a section just leaves the volunteer unassigned).
+  sectionId   String?
   // Courses this person is assigned to (JSON array of race ids; [] = none yet).
   raceIds     String   @default("[]")
   note        String?
   createdAt   DateTime @default(now())
 
   @@unique([eventId, userId])
+}
+
+// An organisation pôle/secteur (retrait dossards, buvette, balisage…). Led by an
+// organiser (responsibleId = EventMember id) with volunteers assigned via their
+// EventMember.sectionId.
+model Section {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name          String
+  color         String   @default("#7CB518")
+  // Organiser in charge (EventMember id; plain ref, resolved in the UI).
+  responsibleId String?
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
 }
 
 // Partner organisation of an event (sponsor, mairie, secours, presse…).

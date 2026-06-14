@@ -9,6 +9,7 @@ const MemberPatchSchema = z.object({
   phone: z.string().max(30).nullable().optional(),
   role: z.enum(["ORGANISATEUR", "BENEVOLE"]).optional(),
   raceIds: z.array(z.string()).max(50).optional(),
+  sectionId: z.string().nullable().optional(),
   note: z.string().max(500).nullable().optional(),
   // Revoke the current access link and issue a new one (if the old link leaked).
   regenerateToken: z.boolean().optional(),
