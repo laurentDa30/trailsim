@@ -329,10 +329,20 @@ export default function LeafletMap({
   onAssignLogi,
   members,
 }: LeafletMapProps) {
-  // Compute center from first race with points
+  // Centre on the middle of the first race's bounding box (not its start point,
+  // which sits at one edge) so the trace is framed, and start a notch closer.
   const firstPoints = races.find((r) => r.gpxPoints.length > 0)?.gpxPoints
   const center: [number, number] = firstPoints
-    ? [firstPoints[0].lat, firstPoints[0].lng]
+    ? (() => {
+        let latMin = Infinity, latMax = -Infinity, lngMin = Infinity, lngMax = -Infinity
+        for (const p of firstPoints) {
+          if (p.lat < latMin) latMin = p.lat
+          if (p.lat > latMax) latMax = p.lat
+          if (p.lng < lngMin) lngMin = p.lng
+          if (p.lng > lngMax) lngMax = p.lng
+        }
+        return [(latMin + latMax) / 2, (lngMin + lngMax) / 2] as [number, number]
+      })()
     : [45.92, 6.87]
 
   const mapRef = useRef<L.Map | null>(null)
@@ -536,7 +546,7 @@ export default function LeafletMap({
       <style>{`html[data-theme="dark"] .leaflet-tile-pane { filter: ${tileMode === 'standard' ? 'invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%)' : 'none'}; }`}</style>
       <MapContainer
         center={center}
-        zoom={12}
+        zoom={13}
         style={{ width: '100%', height: '100%', background: '#14110f' }}
         zoomControl={false}
         preferCanvas={true}

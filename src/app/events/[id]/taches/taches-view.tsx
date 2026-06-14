@@ -328,8 +328,20 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
 
   function setStatus(t: Task, status: string) {
     const done = status === 'VALIDE'
-    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status, done } : x)))
+    // Marking a parent task done also completes its sub-tasks.
+    const kidsToClose =
+      status === 'VALIDE' && !t.parentId
+        ? tasks.filter((x) => x.parentId === t.id && x.status !== 'VALIDE')
+        : []
+    setTasks((prev) =>
+      prev.map((x) => {
+        if (x.id === t.id) return { ...x, status, done }
+        if (kidsToClose.some((k) => k.id === x.id)) return { ...x, status: 'VALIDE', done: true }
+        return x
+      })
+    )
     patch(t.id, { status })
+    for (const k of kidsToClose) patch(k.id, { status: 'VALIDE' })
   }
 
   function setAssignee(t: Task, assigneeId: string | null) {

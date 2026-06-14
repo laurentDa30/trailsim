@@ -97,11 +97,12 @@ export function MobileNav({ activePage, eventId }: PageNavProps) {
 
       {open && (
         <div
-          className="absolute left-0 top-full mt-2 w-52 rounded-lg overflow-hidden z-50 py-1"
+          className="absolute left-0 top-full mt-2 w-52 rounded-lg overflow-hidden py-1"
           style={{
             background: 'var(--color-bg-1)',
             border: '1px solid var(--color-line)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+            zIndex: 2000,
           }}
         >
           {items.map((item) => {

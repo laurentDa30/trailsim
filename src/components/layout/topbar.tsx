@@ -68,11 +68,12 @@ export function Topbar({
 
   return (
     <header
-      className="flex items-center gap-3 px-4 shrink-0"
+      className="relative flex items-center gap-3 px-4 shrink-0"
       style={{
         height: 52,
         background: 'var(--color-bg-1)',
         borderBottom: '1px solid var(--color-line)',
+        zIndex: 1100,
       }}
     >
       {/* Brand */}
