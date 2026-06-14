@@ -78,12 +78,23 @@ export default async function InvitePage({ params }: PageProps) {
     redirect(`/b/${token}`)
   }
 
+  // Login mode once an account with a password exists; otherwise set-password.
+  const boundUser = member.userId
+    ? await db.user.findUnique({ where: { id: member.userId }, select: { email: true, passwordHash: true } })
+    : null
+  const mode = boundUser?.passwordHash ? 'login' : 'setup'
+  const loginEmail = mode === 'login' ? boundUser!.email : member.email
+  const emailIsReal = !!member.email
+
   return (
     <MagicLinkSignIn
       token={token}
       eventName={member.event.name}
       eventId={member.event.id}
       memberName={member.name}
+      mode={mode}
+      email={loginEmail}
+      emailIsReal={emailIsReal}
     />
   )
 }
