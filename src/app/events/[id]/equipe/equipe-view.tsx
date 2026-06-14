@@ -252,9 +252,10 @@ export function EquipeView({ event, owner, races, initialMembers, initialPartner
   }
 
   async function copyInvite(m: Member) {
-    // The personal access link: opens the volunteer view directly, no account
-    // needed (the page offers an optional sign-up / organiser claim).
-    const url = `${window.location.origin}/b/${m.inviteToken}`
+    // Organisers get the management link (passwordless sign-in); volunteers get
+    // the read-only /b/ view. Both use the same personal token.
+    const path = m.role === 'ORGANISATEUR' ? 'invite' : 'b'
+    const url = `${window.location.origin}/${path}/${m.inviteToken}`
     try {
       await navigator.clipboard.writeText(url)
       setCopiedId(m.id)

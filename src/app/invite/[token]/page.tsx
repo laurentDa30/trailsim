@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import db from '@/lib/db'
+import { MagicLinkSignIn } from './magic-link-signin'
 
 interface PageProps {
   params: Promise<{ token: string }>
@@ -40,16 +41,13 @@ function Notice({ title, body }: { title: string; body: string }) {
 }
 
 /**
- * Claim an invite link: binds the logged-in account to the EventMember record
- * and activates it. The middleware already forces login (with callbackUrl back
- * here), so an invited volunteer without an account registers first, then lands
- * back on this page.
+ * Bureau access link. The token is the credential: an ORGANISATEUR clicks it and
+ * a passwordless management session is opened (account created/bound on first
+ * use, membership marked ACTIF — handled in the auth provider). Bénévoles are
+ * redirected to their read-only /b/ view.
  */
 export default async function InvitePage({ params }: PageProps) {
   const { token } = await params
-
-  const session = await auth()
-  if (!session?.user?.id) redirect(`/login?callbackUrl=/invite/${token}`)
 
   const member = await db.eventMember.findUnique({
     where: { inviteToken: token },
@@ -65,33 +63,27 @@ export default async function InvitePage({ params }: PageProps) {
     )
   }
 
-  // The owner doesn't need a membership.
-  if (member.event.userId === session.user.id) {
+  const session = await auth()
+
+  // Owner or already-signed-in organiser → straight to management.
+  if (session?.user?.id && member.event.userId === session.user.id) {
+    redirect(`/events/${member.event.id}/setup`)
+  }
+  if (session?.user?.id && member.userId === session.user.id) {
     redirect(`/events/${member.event.id}/setup`)
   }
 
-  if (member.userId && member.userId !== session.user.id) {
-    return (
-      <Notice
-        title="Invitation déjà utilisée"
-        body="Ce lien a déjà été réclamé par un autre compte. Demandez un nouveau lien à l'organisateur."
-      />
-    )
+  // Volunteers don't get management access — send them to their personal view.
+  if (member.role !== 'ORGANISATEUR') {
+    redirect(`/b/${token}`)
   }
 
-  if (member.userId !== session.user.id) {
-    // A user can hold only one membership per event (@@unique). If they already
-    // have one (e.g. invited twice), keep the existing membership as-is.
-    const existing = await db.eventMember.findFirst({
-      where: { eventId: member.eventId, userId: session.user.id },
-    })
-    if (!existing) {
-      await db.eventMember.update({
-        where: { id: member.id },
-        data: { userId: session.user.id, status: 'ACTIF' },
-      })
-    }
-  }
-
-  redirect(`/events/${member.event.id}/equipe`)
+  return (
+    <MagicLinkSignIn
+      token={token}
+      eventName={member.event.name}
+      eventId={member.event.id}
+      memberName={member.name}
+    />
+  )
 }
