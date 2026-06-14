@@ -220,7 +220,8 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
   const [category, setCategory] = useState('GENERAL')
   const [due, setDue] = useState('')
   const [busy, setBusy] = useState(false)
-  const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [view, setView] = useState<'list' | 'calendar'>('calendar')
+  const [calSpan, setCalSpan] = useState<number>(1)
   const [calMonth, setCalMonth] = useState<Date>(() => {
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -633,112 +634,140 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
       byDay.get(k)!.push(t)
     }
 
-    const start = new Date(calMonth)
-    start.setDate(1 - mondayIndex(calMonth))
-    const cells: Date[] = []
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(start)
-      d.setDate(start.getDate() + i)
-      cells.push(d)
-    }
     const todayKey = dayKey(new Date())
-    const monthIdx = calMonth.getMonth()
 
     const shift = (delta: number) =>
-      setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + delta, 1))
+      setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + delta * calSpan, 1))
+
+    const monthsToShow: Date[] = []
+    for (let i = 0; i < calSpan; i++) {
+      monthsToShow.push(new Date(calMonth.getFullYear(), calMonth.getMonth() + i, 1))
+    }
+
+    function renderMonth(monthDate: Date) {
+      const start = new Date(monthDate)
+      start.setDate(1 - mondayIndex(monthDate))
+      const cells: Date[] = []
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(start)
+        d.setDate(start.getDate() + i)
+        cells.push(d)
+      }
+      const monthIdx = monthDate.getMonth()
+      return (
+        <div key={`${monthDate.getFullYear()}-${monthIdx}`} className="flex flex-col gap-2">
+          <div className="text-center text-sm font-semibold capitalize" style={{ color: 'var(--color-ink)' }}>
+            {MONTH_LABELS[monthIdx]} {monthDate.getFullYear()}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {DAY_LABELS.map((d) => (
+              <div key={d} className="text-center text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {cells.map((d, i) => {
+              const k = dayKey(d)
+              const inMonth = d.getMonth() === monthIdx
+              const isToday = k === todayKey
+              const dayTasks = byDay.get(k) ?? []
+              return (
+                <div
+                  key={i}
+                  className="rounded-md p-1 flex flex-col gap-0.5"
+                  style={{
+                    minHeight: 62,
+                    background: inMonth ? 'var(--color-bg-2)' : 'transparent',
+                    border: `1px solid ${isToday ? 'var(--color-lime)' : 'var(--color-line)'}`,
+                    opacity: inMonth ? 1 : 0.4,
+                  }}
+                >
+                  <span
+                    className="text-[10px] font-medium tabular-nums"
+                    style={{ color: isToday ? 'var(--color-lime)' : 'var(--color-ink-4)' }}
+                  >
+                    {d.getDate()}
+                  </span>
+                  {dayTasks.slice(0, 3).map((t) => {
+                    const meta = statusMeta(t.status)
+                    const who = t.assigneeId ? memberName.get(t.assigneeId) : null
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setView('list')
+                          if (canEdit) startEdit(t)
+                        }}
+                        title={`${t.title}${who ? ` — ${who}` : ''} (${meta.label})`}
+                        className="text-left truncate rounded px-1 py-0.5 text-[9.5px] leading-tight"
+                        style={{
+                          background: `color-mix(in oklab, ${meta.color} 18%, transparent)`,
+                          color: 'var(--color-ink-2)',
+                          borderLeft: `2px solid ${meta.color}`,
+                          textDecoration: t.status === 'VALIDE' ? 'line-through' : 'none',
+                        }}
+                      >
+                        {t.title}
+                      </button>
+                    )
+                  })}
+                  {dayTasks.length > 3 && (
+                    <span className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>
+                      +{dayTasks.length - 3}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div className="flex flex-col gap-3">
-        {/* Month nav */}
-        <div className="flex items-center justify-between">
+        {/* Nav + span toggle */}
+        <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => shift(-1)}
             className="p-1.5 rounded-md"
             style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-3)' }}
-            aria-label="Mois précédent"
+            aria-label="Période précédente"
           >
             <ChevronLeftIcon size={15} />
           </button>
-          <span className="text-sm font-semibold capitalize" style={{ color: 'var(--color-ink)' }}>
-            {MONTH_LABELS[monthIdx]} {calMonth.getFullYear()}
-          </span>
+          <div className="flex rounded-md overflow-hidden" style={{ border: '1px solid var(--color-line)' }}>
+            {[1, 2].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setCalSpan(n)}
+                className="px-2.5 py-1 text-[11px] font-medium"
+                style={{
+                  background: calSpan === n ? 'color-mix(in oklab, var(--color-lime) 16%, transparent)' : 'var(--color-bg-2)',
+                  color: calSpan === n ? 'var(--color-lime)' : 'var(--color-ink-3)',
+                }}
+              >
+                {n} mois
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => shift(1)}
             className="p-1.5 rounded-md"
             style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-3)' }}
-            aria-label="Mois suivant"
+            aria-label="Période suivante"
           >
             <ChevronRightIcon size={15} />
           </button>
         </div>
 
-        {/* Weekday header */}
-        <div className="grid grid-cols-7 gap-1">
-          {DAY_LABELS.map((d) => (
-            <div key={d} className="text-center text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
-              {d}
-            </div>
-          ))}
-        </div>
-
-        {/* Day grid */}
-        <div className="grid grid-cols-7 gap-1">
-          {cells.map((d, i) => {
-            const k = dayKey(d)
-            const inMonth = d.getMonth() === monthIdx
-            const isToday = k === todayKey
-            const dayTasks = byDay.get(k) ?? []
-            return (
-              <div
-                key={i}
-                className="rounded-md p-1 flex flex-col gap-0.5"
-                style={{
-                  minHeight: 62,
-                  background: inMonth ? 'var(--color-bg-2)' : 'transparent',
-                  border: `1px solid ${isToday ? 'var(--color-lime)' : 'var(--color-line)'}`,
-                  opacity: inMonth ? 1 : 0.4,
-                }}
-              >
-                <span
-                  className="text-[10px] font-medium tabular-nums"
-                  style={{ color: isToday ? 'var(--color-lime)' : 'var(--color-ink-4)' }}
-                >
-                  {d.getDate()}
-                </span>
-                {dayTasks.slice(0, 3).map((t) => {
-                  const meta = statusMeta(t.status)
-                  const who = t.assigneeId ? memberName.get(t.assigneeId) : null
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => {
-                        setView('list')
-                        if (canEdit) startEdit(t)
-                      }}
-                      title={`${t.title}${who ? ` — ${who}` : ''} (${meta.label})`}
-                      className="text-left truncate rounded px-1 py-0.5 text-[9.5px] leading-tight"
-                      style={{
-                        background: `color-mix(in oklab, ${meta.color} 18%, transparent)`,
-                        color: 'var(--color-ink-2)',
-                        borderLeft: `2px solid ${meta.color}`,
-                        textDecoration: t.status === 'VALIDE' ? 'line-through' : 'none',
-                      }}
-                    >
-                      {t.title}
-                    </button>
-                  )
-                })}
-                {dayTasks.length > 3 && (
-                  <span className="text-[9px]" style={{ color: 'var(--color-ink-4)' }}>
-                    +{dayTasks.length - 3}
-                  </span>
-                )}
-              </div>
-            )
-          })}
+        <div className={calSpan === 2 ? 'grid lg:grid-cols-2 gap-4' : ''}>
+          {monthsToShow.map((m) => renderMonth(m))}
         </div>
 
         {/* Undated open tasks (not on the calendar) */}
