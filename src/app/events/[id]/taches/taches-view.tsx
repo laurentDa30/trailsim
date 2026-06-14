@@ -15,7 +15,6 @@ import {
   WalletIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  ListIcon,
 } from 'lucide-react'
 import {
   TASK_CATEGORIES,
@@ -220,7 +219,6 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
   const [category, setCategory] = useState('GENERAL')
   const [due, setDue] = useState('')
   const [busy, setBusy] = useState(false)
-  const [view, setView] = useState<'list' | 'calendar'>('calendar')
   const [calSpan, setCalSpan] = useState<number>(1)
   const [calMonth, setCalMonth] = useState<Date>(() => {
     const d = new Date()
@@ -697,7 +695,6 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
                         key={t.id}
                         type="button"
                         onClick={() => {
-                          setView('list')
                           if (canEdit) startEdit(t)
                         }}
                         title={`${t.title}${who ? ` — ${who}` : ''} (${meta.label})`}
@@ -766,7 +763,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
           </button>
         </div>
 
-        <div className={calSpan === 2 ? 'grid lg:grid-cols-2 gap-4' : ''}>
+        <div className={calSpan === 2 ? 'flex flex-col gap-4' : ''}>
           {monthsToShow.map((m) => renderMonth(m))}
         </div>
 
@@ -783,7 +780,6 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
                   key={t.id}
                   type="button"
                   onClick={() => {
-                    setView('list')
                     if (canEdit) startEdit(t)
                   }}
                   className="truncate max-w-[160px] rounded px-1.5 py-0.5 text-[10px]"
@@ -816,144 +812,137 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
         eventDate={event.date ? fmtDate(event.date) : undefined}
       />
 
-      <main className="flex-1 w-full max-w-3xl mx-auto p-4 flex flex-col gap-4">
-        {/* Budget summary */}
-        {budget.hasAny && (
+      <div className="flex-1 flex flex-col lg:flex-row lg:items-start">
+        {/* ── Tasks pipeline (left) — scrolls with the page ── */}
+        <div className="flex-1 min-w-0 p-4 flex flex-col gap-4">
+          {/* Budget summary */}
+          {budget.hasAny && (
+            <section
+              className="rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-1"
+              style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
+            >
+              <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+                <WalletIcon size={14} style={{ color: 'var(--color-lime)' }} /> Budget
+              </span>
+              <span className="text-xs" style={{ color: 'var(--color-ink-3)' }}>
+                Estimé <b style={{ color: 'var(--color-ink)' }}>{fmtMoney(budget.est)}</b>
+              </span>
+              <span className="text-xs" style={{ color: 'var(--color-ink-3)' }}>
+                Réel <b style={{ color: 'var(--color-ink)' }}>{fmtMoney(budget.act)}</b>
+              </span>
+              {budget.act > 0 && (
+                <span
+                  className="text-xs"
+                  style={{ color: budget.act > budget.est ? 'var(--color-danger, #DC2626)' : 'var(--color-safe, #22C55E)' }}
+                >
+                  Écart {budget.act - budget.est >= 0 ? '+' : ''}{fmtMoney(budget.act - budget.est)}
+                </span>
+              )}
+            </section>
+          )}
+
           <section
-            className="rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-1"
+            className="rounded-xl overflow-hidden"
             style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
           >
-            <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
-              <WalletIcon size={14} style={{ color: 'var(--color-lime)' }} /> Budget
-            </span>
-            <span className="text-xs" style={{ color: 'var(--color-ink-3)' }}>
-              Estimé <b style={{ color: 'var(--color-ink)' }}>{fmtMoney(budget.est)}</b>
-            </span>
-            <span className="text-xs" style={{ color: 'var(--color-ink-3)' }}>
-              Réel <b style={{ color: 'var(--color-ink)' }}>{fmtMoney(budget.act)}</b>
-            </span>
-            {budget.act > 0 && (
-              <span
-                className="text-xs"
-                style={{ color: budget.act > budget.est ? 'var(--color-danger, #DC2626)' : 'var(--color-safe, #22C55E)' }}
-              >
-                Écart {budget.act - budget.est >= 0 ? '+' : ''}{fmtMoney(budget.act - budget.est)}
+            <div
+              className="flex items-center gap-2 px-4 py-3"
+              style={{ borderBottom: '1px solid var(--color-line)' }}
+            >
+              <span style={{ color: 'var(--color-lime)' }}>
+                <ClipboardListIcon size={15} />
               </span>
-            )}
-          </section>
-        )}
-
-        <section
-          className="rounded-xl overflow-hidden"
-          style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
-        >
-          <div
-            className="flex items-center gap-2 px-4 py-3"
-            style={{ borderBottom: '1px solid var(--color-line)' }}
-          >
-            <span style={{ color: 'var(--color-lime)' }}>
-              <ClipboardListIcon size={15} />
-            </span>
-            <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
-              Pipeline d’organisation
-            </span>
-            <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
-              {openCount} en cours/à faire · {doneCount} validées
-            </span>
-            <div className="flex-1" />
-            {/* View toggle: pipeline list vs calendar */}
-            <div className="flex rounded-md overflow-hidden" style={{ border: '1px solid var(--color-line)' }}>
-              {([
-                { v: 'list' as const, icon: <ListIcon size={12} />, label: 'Liste' },
-                { v: 'calendar' as const, icon: <CalendarIcon size={12} />, label: 'Calendrier' },
-              ]).map((o) => (
+              <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+                Pipeline d’organisation
+              </span>
+              <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
+                {openCount} en cours/à faire · {doneCount} validées
+              </span>
+              <div className="flex-1" />
+              {canEdit && (
                 <button
-                  key={o.v}
                   type="button"
-                  onClick={() => setView(o.v)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium"
-                  style={{
-                    background: view === o.v ? 'color-mix(in oklab, var(--color-lime) 16%, transparent)' : 'var(--color-bg-2)',
-                    color: view === o.v ? 'var(--color-lime)' : 'var(--color-ink-3)',
-                  }}
-                >
-                  {o.icon} {o.label}
-                </button>
-              ))}
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={loadTemplate}
-                disabled={busy}
-                title="Ajoute la checklist type d'un trail (déclaration préfecture, secours, balisage…), calée sur la date de l'événement"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium"
-                style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
-              >
-                <SparklesIcon size={12} /> Charger le modèle trail
-              </button>
-            )}
-          </div>
-
-          <div className="p-4 flex flex-col gap-4">
-            {canEdit && (
-              <form onSubmit={addTask} className="flex flex-wrap gap-2">
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Nouvelle tâche *"
-                  required
-                  className="flex-1 min-w-[180px] px-2.5 py-1.5 rounded-md text-xs"
-                  style={inputStyle}
-                />
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="px-2 py-1.5 rounded-md text-xs"
-                  style={inputStyle}
-                >
-                  {TASK_CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-                <input
-                  type="date"
-                  value={due}
-                  onChange={(e) => setDue(e.target.value)}
-                  className="px-2 py-1.5 rounded-md text-xs"
-                  style={inputStyle}
-                />
-                <button
-                  type="submit"
+                  onClick={loadTemplate}
                   disabled={busy}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium"
-                  style={{
-                    background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)',
-                    color: 'var(--color-lime)',
-                    border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
-                  }}
+                  title="Ajoute la checklist type d'un trail (déclaration préfecture, secours, balisage…), calée sur la date de l'événement"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium"
+                  style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink-2)' }}
                 >
-                  <PlusIcon size={13} /> Ajouter
+                  <SparklesIcon size={12} /> Modèle trail
                 </button>
-              </form>
-            )}
+              )}
+            </div>
 
-            {tasks.length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--color-ink-4)' }}>
-                Aucune tâche. {canEdit ? 'Chargez le modèle trail pour démarrer avec la checklist type (préfecture, assurance, secours, balisage…), ou ajoutez vos propres tâches.' : ''}
-              </p>
-            ) : view === 'calendar' ? (
-              <Calendar />
-            ) : (
-              <>
-                {STATUS_ORDER.map((s) => (
-                  <Group key={s} statusValue={s} />
-                ))}
-              </>
-            )}
+            <div className="p-4 flex flex-col gap-4">
+              {canEdit && (
+                <form onSubmit={addTask} className="flex flex-wrap gap-2">
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Nouvelle tâche *"
+                    required
+                    className="flex-1 min-w-[180px] px-2.5 py-1.5 rounded-md text-xs"
+                    style={inputStyle}
+                  />
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="px-2 py-1.5 rounded-md text-xs"
+                    style={inputStyle}
+                  >
+                    {TASK_CATEGORIES.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="date"
+                    value={due}
+                    onChange={(e) => setDue(e.target.value)}
+                    className="px-2 py-1.5 rounded-md text-xs"
+                    style={inputStyle}
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium"
+                    style={{
+                      background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)',
+                      color: 'var(--color-lime)',
+                      border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
+                    }}
+                  >
+                    <PlusIcon size={13} /> Ajouter
+                  </button>
+                </form>
+              )}
+
+              {tasks.length === 0 ? (
+                <p className="text-xs" style={{ color: 'var(--color-ink-4)' }}>
+                  Aucune tâche. {canEdit ? 'Chargez le modèle trail pour démarrer avec la checklist type (préfecture, assurance, secours, balisage…), ou ajoutez vos propres tâches.' : ''}
+                </p>
+              ) : (
+                <>
+                  {STATUS_ORDER.map((s) => (
+                    <Group key={s} statusValue={s} />
+                  ))}
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* ── Calendar (right) — sticky on large screens ── */}
+        <aside
+          className="w-full lg:w-[440px] shrink-0 p-4 flex flex-col gap-3 border-t lg:border-t-0 lg:border-l lg:sticky lg:top-0 lg:max-h-screen lg:overflow-y-auto"
+          style={{ background: 'var(--color-bg-1)', borderColor: 'var(--color-line)' }}
+        >
+          <div className="flex items-center gap-2">
+            <span style={{ color: 'var(--color-lime)' }}><CalendarIcon size={15} /></span>
+            <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>Calendrier</span>
           </div>
-        </section>
-      </main>
+          <Calendar />
+        </aside>
+      </div>
     </div>
   )
 }
