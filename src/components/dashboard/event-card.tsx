@@ -92,35 +92,6 @@ function StatusBadge({ status }: { status: SimulationStatus }) {
   )
 }
 
-function RiskBar({ score }: { score: number }) {
-  const color =
-    score > 80
-      ? "var(--color-danger)"
-      : score > 30
-      ? "var(--color-warning)"
-      : "var(--color-safe)"
-
-  return (
-    <div className="flex items-center gap-2">
-      <div
-        className="flex-1 h-1.5 rounded-full overflow-hidden"
-        style={{ backgroundColor: "var(--color-line)" }}
-      >
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${score}%`, backgroundColor: color }}
-        />
-      </div>
-      <span
-        className="text-xs font-mono tabular-nums"
-        style={{ color, minWidth: "2.5rem", textAlign: "right" }}
-      >
-        {score}%
-      </span>
-    </div>
-  )
-}
-
 function SimulationBlock({
   simulation,
 }: {
@@ -135,34 +106,17 @@ function SimulationBlock({
   }
 
   if (simulation.status === "DONE") {
-    // Max risk across detected zones, from the COMPACT riskMap column (not the
-    // multi-MB resultSnapshot). Empty for simulations saved before this split.
-    let riskScore = 0
-    let zones = 0
-    if (simulation.riskMap) {
-      try {
-        const riskMap: { riskScore: number }[] = JSON.parse(simulation.riskMap)
-        if (Array.isArray(riskMap)) {
-          zones = riskMap.length
-          riskScore = riskMap.reduce((m, e) => Math.max(m, e.riskScore ?? 0), 0)
-          riskScore = Math.round(riskScore * 100)
-        }
-      } catch {
-        riskScore = 0
-      }
-    }
-
     return (
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: "var(--color-ink-4)" }}>
-            Risque max
-          </span>
-          <span className="text-xs" style={{ color: "var(--color-ink-4)" }}>
-            {zones} zone{zones > 1 ? "s" : ""}
-          </span>
-        </div>
-        <RiskBar score={riskScore} />
+      <div className="flex items-center justify-between">
+        <span className="text-xs" style={{ color: "var(--color-ink-4)" }}>
+          Simulation terminée
+        </span>
+        <span
+          className="text-xs font-mono tabular-nums"
+          style={{ color: "var(--color-ink-3)" }}
+        >
+          {simulation.totalRunners.toLocaleString("fr-FR")} coureurs
+        </span>
       </div>
     )
   }
