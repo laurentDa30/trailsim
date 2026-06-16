@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon, LogOut } from 'lucide-react'
+import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon, LogOut, ShieldCheck } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { PageNav, MobileNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
+import { isAdminEmail } from '@/lib/admin'
 
 type StatusKey = 'config' | 'sim' | 'results'
 
@@ -45,6 +46,7 @@ export function Topbar({
 
   // Derive avatar initials from the signed-in user (name → "JD", else email).
   const { data: sessionData } = useSession()
+  const isAdmin = isAdminEmail(sessionData?.user?.email)
   const initials = useMemo(() => {
     if (userInitials) return userInitials
     const name = sessionData?.user?.name?.trim()
@@ -217,6 +219,19 @@ export function Topbar({
               boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
             }}
           >
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={() => setMenuOpen(false)}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors"
+                style={{ color: 'var(--color-ink-2)', borderBottom: '1px solid var(--color-line)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-2)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <ShieldCheck size={14} style={{ color: 'var(--color-ink-4)' }} />
+                Administration
+              </Link>
+            )}
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors"
