@@ -50,12 +50,17 @@ export async function PATCH(
 
     const { resultSnapshot, riskMap } = parsed.data
 
+    // Persist a COMPACT riskMap separately so the dashboard can show each event's
+    // risk without ever reading the multi-MB resultSnapshot (the trajectories).
+    const snapRiskMap = (resultSnapshot as { riskMap?: unknown }).riskMap
+    const riskMapToStore = riskMap ?? snapRiskMap ?? []
+
     const updated = await db.simulation.update({
       where: { id },
       data: {
         status: "DONE",
         resultSnapshot: JSON.stringify(resultSnapshot),
-        ...(riskMap !== undefined && { riskMap: JSON.stringify(riskMap) }),
+        riskMap: JSON.stringify(riskMapToStore),
       },
       // Don't echo the multi-MB snapshot back to the client.
       select: { id: true, status: true },

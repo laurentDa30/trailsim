@@ -19,7 +19,8 @@ interface Simulation {
   id: string
   status: SimulationStatus
   totalRunners: number
-  resultSnapshot?: string | null
+  // Compact per-zone risk summary (NOT the multi-MB resultSnapshot).
+  riskMap?: string | null
   // progress for RUNNING state (0–100)
   progress?: number
 }
@@ -134,16 +135,18 @@ function SimulationBlock({
   }
 
   if (simulation.status === "DONE") {
-    // Max risk across detected zones (from the compressed result snapshot)
+    // Max risk across detected zones, from the COMPACT riskMap column (not the
+    // multi-MB resultSnapshot). Empty for simulations saved before this split.
     let riskScore = 0
     let zones = 0
-    if (simulation.resultSnapshot) {
+    if (simulation.riskMap) {
       try {
-        const snap = JSON.parse(simulation.resultSnapshot)
-        const riskMap: { riskScore: number }[] = Array.isArray(snap.riskMap) ? snap.riskMap : []
-        zones = riskMap.length
-        riskScore = riskMap.reduce((m, e) => Math.max(m, e.riskScore ?? 0), 0)
-        riskScore = Math.round(riskScore * 100)
+        const riskMap: { riskScore: number }[] = JSON.parse(simulation.riskMap)
+        if (Array.isArray(riskMap)) {
+          zones = riskMap.length
+          riskScore = riskMap.reduce((m, e) => Math.max(m, e.riskScore ?? 0), 0)
+          riskScore = Math.round(riskScore * 100)
+        }
       } catch {
         riskScore = 0
       }

@@ -38,7 +38,10 @@ export default async function DashboardPage() {
           id: true,
           status: true,
           totalRunners: true,
-          resultSnapshot: true,
+          // Compact per-zone risk summary — NOT resultSnapshot (multi-MB
+          // trajectories), which would blow the DB data-transfer quota when
+          // loaded for every event on every dashboard view.
+          riskMap: true,
         },
       },
       tasks: {
@@ -250,7 +253,7 @@ export default async function DashboardPage() {
                           | "DONE"
                           | "ERROR",
                         totalRunners: event.simulations[0].totalRunners,
-                        resultSnapshot: event.simulations[0].resultSnapshot,
+                        riskMap: event.simulations[0].riskMap,
                       }
                     : null
                 }
