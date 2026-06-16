@@ -3,7 +3,7 @@ import db from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
-import { applyTraceSnapshot } from '@/lib/sim-snapshot'
+import { applyTraceSnapshot, decodeSnapshot } from '@/lib/sim-snapshot'
 import type { PlacedLogi } from '@/lib/logistics'
 import { clusterRiskZones, computePassageByKmBin, type RaceLite, type PassageBin } from '@/lib/report-metrics'
 import type { OpMapRace, OpMapZone } from '../../report/[simId]/operational-map'
@@ -36,14 +36,7 @@ export default async function TerrainPage({ params }: PageProps) {
     sim.gpxSnapshot
   )
 
-  let result: CompressedSimulationResult | null = null
-  if (sim.resultSnapshot) {
-    try {
-      result = JSON.parse(sim.resultSnapshot) as CompressedSimulationResult
-    } catch {
-      result = null
-    }
-  }
+  const result = decodeSnapshot<CompressedSimulationResult>(sim.resultSnapshot)
 
   const parsedRaces = races.map((race) => {
     let gpxPoints: GPXPoint[] = []

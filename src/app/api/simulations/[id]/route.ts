@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
 import { getEventAccess, canManage, canRead } from "@/lib/authz"
+import { encodeSnapshot, decodeSnapshotString } from "@/lib/sim-snapshot"
 import { z } from "zod"
 
 const SimulationUpdateSchema = z.object({
@@ -37,7 +38,12 @@ export async function GET(
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    return Response.json(simulation)
+    // resultSnapshot is gzipped at rest — inflate it back to a JSON string so
+    // the API contract (a JSON string) is unchanged for any consumer.
+    return Response.json({
+      ...simulation,
+      resultSnapshot: decodeSnapshotString(simulation.resultSnapshot),
+    })
   } catch (error) {
     console.error("[GET /api/simulations/[id]]", error)
     return Response.json({ error: "Internal server error" }, { status: 500 })
@@ -81,7 +87,7 @@ export async function PATCH(
       where: { id },
       data: {
         ...(status !== undefined && { status }),
-        ...(resultSnapshot !== undefined && { resultSnapshot: JSON.stringify(resultSnapshot) }),
+        ...(resultSnapshot !== undefined && { resultSnapshot: encodeSnapshot(resultSnapshot) }),
         ...(riskMap !== undefined && { riskMap: JSON.stringify(riskMap) }),
       },
     })

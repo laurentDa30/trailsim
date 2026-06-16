@@ -2,6 +2,7 @@ import { gunzipSync } from "node:zlib"
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
 import { getEventAccess, canManage, canRead } from "@/lib/authz"
+import { encodeSnapshot } from "@/lib/sim-snapshot"
 import { z } from "zod"
 
 const ResultSchema = z.object({
@@ -59,7 +60,8 @@ export async function PATCH(
       where: { id },
       data: {
         status: "DONE",
-        resultSnapshot: JSON.stringify(resultSnapshot),
+        // gzip at rest — slashes the DB transfer every results/report page read.
+        resultSnapshot: encodeSnapshot(resultSnapshot),
         riskMap: JSON.stringify(riskMapToStore),
       },
       // Don't echo the multi-MB snapshot back to the client.

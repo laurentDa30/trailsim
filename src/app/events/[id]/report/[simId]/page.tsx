@@ -3,7 +3,7 @@ import db from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
 import type { CompressedSimulationResult, GPXPoint } from '@/engine/types'
-import { applyTraceSnapshot } from '@/lib/sim-snapshot'
+import { applyTraceSnapshot, decodeSnapshot } from '@/lib/sim-snapshot'
 import type { PlacedLogi } from '@/lib/logistics'
 import {
   clusterRiskZones,
@@ -80,14 +80,7 @@ export default async function ReportPage({ params }: PageProps) {
     sim.gpxSnapshot
   )
 
-  let result: CompressedSimulationResult | null = null
-  if (sim.resultSnapshot) {
-    try {
-      result = JSON.parse(sim.resultSnapshot) as CompressedSimulationResult
-    } catch {
-      result = null
-    }
-  }
+  const result = decodeSnapshot<CompressedSimulationResult>(sim.resultSnapshot)
 
   const parsedRaces = races.map((race) => {
     let gpxPoints: GPXPoint[] = []

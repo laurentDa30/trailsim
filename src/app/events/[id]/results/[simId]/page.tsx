@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth'
 import { getEventAccess, canRead } from '@/lib/authz'
 import { CompressedSimulationResult } from '@/engine/types'
 import type { GPXPoint } from '@/engine/types'
-import { applyTraceSnapshot } from '@/lib/sim-snapshot'
+import { applyTraceSnapshot, decodeSnapshot } from '@/lib/sim-snapshot'
 import { ResultsView } from './results-view'
 
 interface PageProps {
@@ -49,15 +49,8 @@ export default async function ResultsPage({ params }: PageProps) {
     orderBy: { name: "asc" },
   })
 
-  // Parse resultSnapshot
-  let result: CompressedSimulationResult | null = null
-  if (simulation.resultSnapshot) {
-    try {
-      result = JSON.parse(simulation.resultSnapshot) as CompressedSimulationResult
-    } catch {
-      result = null
-    }
-  }
+  // Parse resultSnapshot (gzipped at rest; decodeSnapshot handles legacy JSON).
+  const result = decodeSnapshot<CompressedSimulationResult>(simulation.resultSnapshot)
 
   // Parse each race's gpxPoints
   const parsedRaces = races.map((race) => {

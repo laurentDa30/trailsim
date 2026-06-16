@@ -6,6 +6,7 @@ import db from '@/lib/db'
 import { Topbar } from '@/components/layout/topbar'
 import { ArrowLeftIcon } from 'lucide-react'
 import type { CompressedSimulationResult } from '@/engine/types'
+import { decodeSnapshot } from '@/lib/sim-snapshot'
 import { ComparePicker } from './compare-picker'
 
 interface PageProps {
@@ -60,12 +61,8 @@ function computeMetrics(sim: SimRow): Metrics {
   const empty: Metrics = { firstFinish: null, dnf: 0, zones: 0, rencontres: 0, perRace: [] }
   if (!sim.resultSnapshot) return { ...empty, perRace: races.map((r) => ({ id: r.id, name: r.name, color: r.color, duration: null })) }
 
-  let res: CompressedSimulationResult
-  try {
-    res = JSON.parse(sim.resultSnapshot) as CompressedSimulationResult
-  } catch {
-    return empty
-  }
+  const res = decodeSnapshot<CompressedSimulationResult>(sim.resultSnapshot)
+  if (!res) return empty
   const ts = res.globalTimestamps ?? []
   const byRace = new Map<string, { finish: number; depart: number }>()
   let dnf = 0
