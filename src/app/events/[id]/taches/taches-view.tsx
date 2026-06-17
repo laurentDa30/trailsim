@@ -89,6 +89,36 @@ function memberColor(id: string): string {
   return MEMBER_COLORS[h % MEMBER_COLORS.length]
 }
 
+/** Toggleable pill for the assignee filter bar. */
+function FilterChip({
+  active,
+  onClick,
+  label,
+  color,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  color?: string
+}) {
+  const accent = color ?? 'var(--color-lime)'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium transition-colors"
+      style={{
+        background: active ? `color-mix(in oklab, ${accent} 18%, transparent)` : 'var(--color-bg-2)',
+        border: `1px solid ${active ? accent : 'var(--color-line)'}`,
+        color: active ? accent : 'var(--color-ink-3)',
+      }}
+    >
+      {color && <span className="w-2 h-2 rounded-full" style={{ background: color }} />}
+      {label}
+    </button>
+  )
+}
+
 interface TaskEditValues {
   title: string
   category: string
@@ -242,16 +272,26 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
     return m
   }, [members])
 
-  // Pipeline groups by status (top-level tasks only; sub-tasks render nested).
+  // Filter the board by assignee: null = everyone, '__none__' = unassigned.
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null)
+
+  // Group by status. No filter → top-level tasks only (sub-tasks render nested).
+  // Filter active → every matching task (parent or sub-task), shown flat.
   const groups = useMemo(() => {
     const by: Record<string, Task[]> = { EN_COURS: [], EN_ATTENTE: [], IMPOSSIBLE: [], VALIDE: [] }
     for (const t of tasks) {
-      if (t.parentId) continue
+      if (filterAssignee === null) {
+        if (t.parentId) continue
+      } else if (filterAssignee === '__none__') {
+        if (t.assigneeId) continue
+      } else if (t.assigneeId !== filterAssignee) {
+        continue
+      }
       const key = by[t.status] ? t.status : 'EN_ATTENTE'
       by[key].push(t)
     }
     return by
-  }, [tasks])
+  }, [tasks, filterAssignee])
 
   const childrenOf = useMemo(() => {
     const map = new Map<string, Task[]>()
@@ -422,7 +462,9 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
     const d = t.dueDate ? daysUntil(t.dueDate) : null
     const late = t.status !== 'VALIDE' && t.status !== 'IMPOSSIBLE' && d != null && d < 0
     const soon = t.status !== 'VALIDE' && d != null && d >= 0 && d <= 14
-    const kids = childrenOf.get(t.id) ?? []
+    // When filtering by assignee, matching sub-tasks already appear flat in the
+    // groups — don't also render them nested under their parent.
+    const kids = filterAssignee !== null ? [] : (childrenOf.get(t.id) ?? [])
     const assignee = t.assigneeId ? memberName.get(t.assigneeId) : null
 
     if (editingId === t.id) {
@@ -648,6 +690,9 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
     const byDay = new Map<string, Task[]>()
     const undated: Task[] = []
     for (const t of tasks) {
+      if (filterAssignee !== null) {
+        if (filterAssignee === '__none__' ? !!t.assigneeId : t.assigneeId !== filterAssignee) continue
+      }
       if (!t.dueDate) {
         if (t.status !== 'VALIDE') undated.push(t)
         continue
@@ -953,9 +998,40 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
                 </p>
               ) : (
                 <>
-                  {STATUS_ORDER.map((s) => (
-                    <Group key={s} statusValue={s} />
-                  ))}
+                  {/* Filter by assignee */}
+                  {members.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className="text-[10.5px] font-semibold uppercase tracking-wider mr-0.5"
+                        style={{ color: 'var(--color-ink-4)' }}
+                      >
+                        Responsable
+                      </span>
+                      <FilterChip active={filterAssignee === null} onClick={() => setFilterAssignee(null)} label="Tous" />
+                      {members.map((m) => (
+                        <FilterChip
+                          key={m.id}
+                          active={filterAssignee === m.id}
+                          onClick={() => setFilterAssignee((f) => (f === m.id ? null : m.id))}
+                          label={m.name}
+                          color={memberColor(m.id)}
+                        />
+                      ))}
+                      <FilterChip
+                        active={filterAssignee === '__none__'}
+                        onClick={() => setFilterAssignee((f) => (f === '__none__' ? null : '__none__'))}
+                        label="Non assigné"
+                      />
+                    </div>
+                  )}
+
+                  {STATUS_ORDER.reduce((n, s) => n + (groups[s]?.length ?? 0), 0) === 0 ? (
+                    <p className="text-xs" style={{ color: 'var(--color-ink-4)' }}>
+                      Aucune tâche pour ce filtre.
+                    </p>
+                  ) : (
+                    STATUS_ORDER.map((s) => <Group key={s} statusValue={s} />)
+                  )}
                 </>
               )}
             </div>
