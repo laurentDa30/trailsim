@@ -11,7 +11,6 @@ import {
   SparklesIcon,
   PencilIcon,
   ListPlusIcon,
-  UserIcon,
   WalletIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -77,6 +76,18 @@ function daysUntil(iso: string): number {
 
 // Pipeline display order.
 const STATUS_ORDER = ['EN_COURS', 'EN_ATTENTE', 'IMPOSSIBLE', 'VALIDE'] as const
+
+// Stable per-member colour so each organiser/volunteer is recognisable at a
+// glance across the board (derived from their id — no DB column needed).
+const MEMBER_COLORS = [
+  '#E11D48', '#DB2777', '#9333EA', '#7C3AED', '#4F46E5', '#2563EB',
+  '#0891B2', '#0D9488', '#16A34A', '#CA8A04', '#EA580C', '#B91C1C',
+]
+function memberColor(id: string): string {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return MEMBER_COLORS[h % MEMBER_COLORS.length]
+}
 
 interface TaskEditValues {
   title: string
@@ -433,6 +444,8 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
           marginLeft: depth * 22,
           background: 'var(--color-bg-2)',
           border: `1px solid ${late ? 'color-mix(in oklab, var(--color-danger, #DC2626) 40%, var(--color-line))' : 'var(--color-line)'}`,
+          // Left accent bar in the assignee's colour — scan the board by who.
+          boxShadow: t.assigneeId ? `inset 3px 0 0 0 ${memberColor(t.assigneeId)}` : undefined,
           opacity: t.status === 'VALIDE' ? 0.6 : t.status === 'IMPOSSIBLE' ? 0.7 : 1,
         }}
       >
@@ -493,9 +506,9 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
                 )}
               </span>
             )}
-            {assignee && (
-              <span className="flex items-center gap-1">
-                <UserIcon size={10} />
+            {assignee && t.assigneeId && (
+              <span className="flex items-center gap-1 font-medium" style={{ color: memberColor(t.assigneeId) }}>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: memberColor(t.assigneeId) }} />
                 {assignee}
               </span>
             )}
@@ -718,6 +731,12 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
                           textDecoration: t.status === 'VALIDE' ? 'line-through' : 'none',
                         }}
                       >
+                        {t.assigneeId && (
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle"
+                            style={{ background: memberColor(t.assigneeId) }}
+                          />
+                        )}
                         {t.title}
                       </button>
                     )
@@ -865,7 +884,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
                 <ClipboardListIcon size={15} />
               </span>
               <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
-                Pipeline d’organisation
+                Suivi de l’organisation
               </span>
               <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
                 {openCount} en cours/à faire · {doneCount} validées
