@@ -25,6 +25,7 @@ export default async function TachesPage({ params }: PageProps) {
   const tasks = await db.task.findMany({
     where: { eventId: id },
     orderBy: [{ done: 'asc' }, { dueDate: 'asc' }, { createdAt: 'asc' }],
+    include: { quotes: { orderBy: { createdAt: 'asc' } } },
   })
 
   // Bureau members the tasks can be assigned to (organisers first).
@@ -47,6 +48,7 @@ export default async function TachesPage({ params }: PageProps) {
         title: t.title,
         category: t.category,
         status: t.status,
+        startDate: t.startDate ? t.startDate.toISOString() : null,
         dueDate: t.dueDate ? t.dueDate.toISOString() : null,
         done: t.done,
         parentId: t.parentId,
@@ -54,6 +56,13 @@ export default async function TachesPage({ params }: PageProps) {
         assigneeId: t.assigneeId,
         amountEstimated: t.amountEstimated,
         amountActual: t.amountActual,
+        quotes: t.quotes.map((q) => ({
+          id: q.id,
+          label: q.label,
+          amount: q.amount,
+          status: q.status,
+          note: q.note,
+        })),
       }))}
       members={members}
       canEdit={canManage(access)}

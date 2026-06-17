@@ -12,21 +12,33 @@ import {
   PencilIcon,
   ListPlusIcon,
   WalletIcon,
+  MessageSquareIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from 'lucide-react'
 import {
   TASK_CATEGORIES,
   TASK_STATUSES,
+  QUOTE_STATUSES,
   categoryMeta,
   statusMeta,
+  quoteStatusMeta,
 } from '@/lib/tasks'
+
+interface Quote {
+  id: string
+  label: string
+  amount: number | null
+  status: string
+  note: string | null
+}
 
 interface Task {
   id: string
   title: string
   category: string
   status: string
+  startDate: string | null
   dueDate: string | null
   done: boolean
   parentId: string | null
@@ -34,6 +46,7 @@ interface Task {
   assigneeId: string | null
   amountEstimated: number | null
   amountActual: number | null
+  quotes: Quote[]
 }
 
 interface Member {
@@ -119,9 +132,191 @@ function FilterChip({
   )
 }
 
+/**
+ * Per-task quote / supplier follow-up. Module scope + local state so typing
+ * doesn't re-render the whole list (same reason as TaskEditRow).
+ */
+function QuotesPanel({
+  quotes,
+  canEdit,
+  onAdd,
+  onPatch,
+  onDelete,
+}: {
+  quotes: Quote[]
+  canEdit: boolean
+  onAdd: (label: string) => void
+  onPatch: (quoteId: string, body: Partial<Quote>) => void
+  onDelete: (quoteId: string) => void
+}) {
+  const [newLabel, setNewLabel] = useState('')
+  const acceptedTotal = quotes
+    .filter((q) => q.status === 'ACCEPTE' && q.amount != null)
+    .reduce((s, q) => s + (q.amount ?? 0), 0)
+
+  function submitAdd(e: React.FormEvent) {
+    e.preventDefault()
+    const v = newLabel.trim()
+    if (!v) return
+    onAdd(v)
+    setNewLabel('')
+  }
+
+  return (
+    <div
+      className="flex flex-col gap-1.5 rounded-lg p-2.5 mb-1"
+      style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}
+    >
+      <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>
+        Suivi des devis / contacts
+      </div>
+      {quotes.length === 0 && (
+        <p className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>
+          Aucun contact pour l’instant.{canEdit ? ' Ajoutez un fournisseur à contacter.' : ''}
+        </p>
+      )}
+      {quotes.map((q) => (
+        <QuoteRow
+          key={q.id}
+          quote={q}
+          canEdit={canEdit}
+          onPatch={(b) => onPatch(q.id, b)}
+          onDelete={() => onDelete(q.id)}
+        />
+      ))}
+      {canEdit && (
+        <form onSubmit={submitAdd} className="flex gap-2 mt-0.5">
+          <input
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="Fournisseur / contact à ajouter…"
+            className="flex-1 px-2 py-1 rounded text-[11px]"
+            style={inputStyle}
+          />
+          <button
+            type="submit"
+            className="px-2.5 py-1 rounded text-[11px] font-medium shrink-0"
+            style={{
+              background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)',
+              color: 'var(--color-lime)',
+              border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)',
+            }}
+          >
+            Ajouter
+          </button>
+        </form>
+      )}
+      {acceptedTotal > 0 && (
+        <div className="text-[11px] font-medium" style={{ color: 'var(--color-ink-2)' }}>
+          Total accepté : {fmtMoney(acceptedTotal)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QuoteRow({
+  quote,
+  canEdit,
+  onPatch,
+  onDelete,
+}: {
+  quote: Quote
+  canEdit: boolean
+  onPatch: (body: Partial<Quote>) => void
+  onDelete: () => void
+}) {
+  const [label, setLabel] = useState(quote.label)
+  const [amount, setAmount] = useState(quote.amount != null ? String(quote.amount) : '')
+  const [note, setNote] = useState(quote.note ?? '')
+  const meta = quoteStatusMeta(quote.status)
+
+  if (!canEdit) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
+        <span
+          className="font-semibold rounded px-1.5 py-0.5"
+          style={{ background: `color-mix(in oklab, ${meta.color} 14%, transparent)`, color: meta.color }}
+        >
+          {meta.label}
+        </span>
+        <span className="font-medium">{quote.label}</span>
+        {quote.amount != null && <span style={{ color: 'var(--color-ink-3)' }}>{fmtMoney(quote.amount)}</span>}
+        {quote.note && <span style={{ color: 'var(--color-ink-4)' }}>· {quote.note}</span>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <select
+        value={quote.status}
+        onChange={(e) => onPatch({ status: e.target.value })}
+        className="text-[10.5px] font-semibold rounded px-1.5 py-1 shrink-0"
+        style={{
+          background: `color-mix(in oklab, ${meta.color} 14%, var(--color-bg-2))`,
+          border: `1px solid color-mix(in oklab, ${meta.color} 45%, transparent)`,
+          color: meta.color,
+        }}
+        aria-label="Statut du devis"
+      >
+        {QUOTE_STATUSES.map((s) => (
+          <option key={s.value} value={s.value}>{s.label}</option>
+        ))}
+      </select>
+      <input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        onBlur={() => {
+          const v = label.trim()
+          if (v && v !== quote.label) onPatch({ label: v })
+          else if (!v) setLabel(quote.label)
+        }}
+        placeholder="Fournisseur"
+        className="flex-1 min-w-[110px] px-2 py-1 rounded text-[11px]"
+        style={inputStyle}
+      />
+      <input
+        type="number"
+        min={0}
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        onBlur={() => {
+          const v = amount.trim() === '' ? null : Math.max(0, Number(amount))
+          if (v !== quote.amount) onPatch({ amount: v })
+        }}
+        placeholder="Montant €"
+        className="w-24 px-2 py-1 rounded text-[11px]"
+        style={inputStyle}
+      />
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onBlur={() => {
+          const v = note.trim() || null
+          if (v !== (quote.note ?? null)) onPatch({ note: v })
+        }}
+        placeholder="Note (réponse attendue, délai…)"
+        className="flex-1 min-w-[110px] px-2 py-1 rounded text-[11px]"
+        style={inputStyle}
+      />
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label="Supprimer le devis"
+        className="p-1 rounded shrink-0"
+        style={{ color: 'var(--color-danger, #DC2626)' }}
+      >
+        <Trash2Icon size={12} />
+      </button>
+    </div>
+  )
+}
+
 interface TaskEditValues {
   title: string
   category: string
+  startDate: string | null
   dueDate: string | null
   amountEstimated: number | null
   amountActual: number | null
@@ -138,13 +333,14 @@ function TaskEditRow({
   onSave,
   onCancel,
 }: {
-  task: { title: string; category: string; dueDate: string | null; amountEstimated: number | null; amountActual: number | null }
+  task: { title: string; category: string; startDate: string | null; dueDate: string | null; amountEstimated: number | null; amountActual: number | null }
   depth: number
   onSave: (v: TaskEditValues) => void
   onCancel: () => void
 }) {
   const [title, setTitle] = useState(task.title)
   const [category, setCategory] = useState(task.category)
+  const [startLocal, setStartLocal] = useState(task.startDate ? task.startDate.slice(0, 10) : '')
   const [dueLocal, setDueLocal] = useState(task.dueDate ? task.dueDate.slice(0, 10) : '')
   const [est, setEst] = useState(task.amountEstimated != null ? String(task.amountEstimated) : '')
   const [act, setAct] = useState(task.amountActual != null ? String(task.amountActual) : '')
@@ -153,6 +349,7 @@ function TaskEditRow({
     onSave({
       title: title.trim(),
       category,
+      startDate: startLocal ? new Date(`${startLocal}T12:00:00`).toISOString() : null,
       dueDate: dueLocal ? new Date(`${dueLocal}T12:00:00`).toISOString() : null,
       amountEstimated: est.trim() === '' ? null : Math.max(0, Number(est)),
       amountActual: act.trim() === '' ? null : Math.max(0, Number(act)),
@@ -191,8 +388,18 @@ function TaskEditRow({
       </select>
       <input
         type="date"
+        value={startLocal}
+        onChange={(e) => setStartLocal(e.target.value)}
+        title="Début (période) — optionnel"
+        className="px-1.5 py-1 rounded text-[11px]"
+        style={inputStyle}
+      />
+      <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>→</span>
+      <input
+        type="date"
         value={dueLocal}
         onChange={(e) => setDueLocal(e.target.value)}
+        title="Échéance / fin de période"
         className="px-1.5 py-1 rounded text-[11px]"
         style={inputStyle}
       />
@@ -330,6 +537,43 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
   const [subFor, setSubFor] = useState<string | null>(null)
   const [subTitle, setSubTitle] = useState('')
 
+  // Which task's quote/follow-up panel is expanded.
+  const [quotesFor, setQuotesFor] = useState<string | null>(null)
+
+  async function addQuote(task: Task, label: string) {
+    const res = await fetch(`/api/events/${event.id}/tasks/${task.id}/quotes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    }).catch(() => null)
+    if (res && res.ok) {
+      const q = (await res.json()) as Quote
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, quotes: [...t.quotes, q] } : t)))
+    }
+  }
+
+  function patchQuote(taskId: string, quoteId: string, body: Partial<Quote>) {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? { ...t, quotes: t.quotes.map((q) => (q.id === quoteId ? { ...q, ...body } : q)) }
+          : t
+      )
+    )
+    fetch(`/api/events/${event.id}/tasks/${taskId}/quotes/${quoteId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }
+
+  function removeQuote(taskId: string, quoteId: string) {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, quotes: t.quotes.filter((q) => q.id !== quoteId) } : t))
+    )
+    fetch(`/api/events/${event.id}/tasks/${taskId}/quotes/${quoteId}`, { method: 'DELETE' }).catch(() => {})
+  }
+
   function patch(id: string, body: Record<string, unknown>) {
     return fetch(`/api/events/${event.id}/tasks/${id}`, {
       method: 'PATCH',
@@ -354,7 +598,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
       })
       if (res.ok) {
         const t = (await res.json()) as Task
-        setTasks((prev) => [...prev, t])
+        setTasks((prev) => [...prev, { ...t, quotes: t.quotes ?? [] }])
         setTitle('')
         setDue('')
       }
@@ -370,7 +614,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
       const res = await fetch(`/api/events/${event.id}/tasks/template`, { method: 'POST' })
       if (res.ok) {
         const data = (await res.json()) as { tasks: Task[] }
-        setTasks(data.tasks)
+        setTasks(data.tasks.map((t) => ({ ...t, quotes: t.quotes ?? [] })))
       }
     } finally {
       setBusy(false)
@@ -419,6 +663,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
               ...t,
               title: v.title.trim(),
               category: v.category,
+              startDate: v.startDate,
               dueDate: v.dueDate,
               amountEstimated: v.amountEstimated,
               amountActual: v.amountActual,
@@ -430,6 +675,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
     await patch(id, {
       title: v.title.trim(),
       category: v.category,
+      startDate: v.startDate,
       dueDate: v.dueDate,
       amountEstimated: v.amountEstimated,
       amountActual: v.amountActual,
@@ -447,7 +693,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
       })
       if (res.ok) {
         const t = (await res.json()) as Task
-        setTasks((prev) => [...prev, t])
+        setTasks((prev) => [...prev, { ...t, quotes: t.quotes ?? [] }])
         setSubTitle('')
         setSubFor(null)
       }
@@ -536,14 +782,18 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.color }} />
               {cat.label}
             </span>
-            {t.dueDate && (
+            {(t.startDate || t.dueDate) && (
               <span
                 className="flex items-center gap-1"
                 style={{ color: late ? 'var(--color-danger, #DC2626)' : soon ? 'var(--color-warning)' : 'var(--color-ink-4)' }}
               >
                 <CalendarIcon size={10} />
-                {fmtDate(t.dueDate)}
-                {t.status !== 'VALIDE' && d != null && (
+                {t.startDate && t.dueDate
+                  ? `${fmtDate(t.startDate)} → ${fmtDate(t.dueDate)}`
+                  : t.dueDate
+                    ? fmtDate(t.dueDate)
+                    : `dès ${fmtDate(t.startDate!)}`}
+                {t.dueDate && t.status !== 'VALIDE' && d != null && (
                   <span>{d < 0 ? `· retard ${-d} j` : d === 0 ? '· aujourd’hui' : `· J−${d}`}</span>
                 )}
               </span>
@@ -561,6 +811,17 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
                 {t.amountEstimated != null && t.amountActual != null && ' · '}
                 {t.amountActual != null && `réel ${fmtMoney(t.amountActual)}`}
               </span>
+            )}
+            {(t.quotes.length > 0 || canEdit) && (
+              <button
+                type="button"
+                onClick={() => setQuotesFor((cur) => (cur === t.id ? null : t.id))}
+                className="flex items-center gap-1 hover:underline"
+                style={{ color: quotesFor === t.id ? 'var(--color-lime)' : 'var(--color-ink-3)' }}
+              >
+                <MessageSquareIcon size={10} />
+                Devis{t.quotes.length > 0 ? ` (${t.quotes.length})` : ''}
+              </button>
             )}
           </div>
         </div>
@@ -618,6 +879,19 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
           </div>
         )}
       </div>
+
+      {/* Quote / supplier follow-up panel */}
+      {quotesFor === t.id && (
+        <div style={{ marginLeft: depth * 22 + 12 }}>
+          <QuotesPanel
+            quotes={t.quotes}
+            canEdit={canEdit}
+            onAdd={(label) => addQuote(t, label)}
+            onPatch={(quoteId, body) => patchQuote(t.id, quoteId, body)}
+            onDelete={(quoteId) => removeQuote(t.id, quoteId)}
+          />
+        </div>
+      )}
 
       {/* Quick sub-task input */}
       {subFor === t.id && canEdit && (

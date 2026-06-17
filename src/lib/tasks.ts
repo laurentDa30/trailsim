@@ -43,3 +43,23 @@ export function statusMeta(value: string) {
 export function doneFromStatus(status: string): boolean {
   return status === 'VALIDE'
 }
+
+// Quote / supplier follow-up statuses (devis) attached to a task.
+export const QUOTE_STATUSES = [
+  { value: 'A_CONTACTER', label: 'À contacter', color: '#9CA3AF' },
+  { value: 'CONTACTE', label: 'Contacté', color: '#60A5FA' },
+  { value: 'DEVIS_RECU', label: 'Devis reçu', color: '#FBBF24' },
+  { value: 'ACCEPTE', label: 'Accepté', color: '#22C55E' },
+  { value: 'REFUSE', label: 'Refusé', color: '#EF4444' },
+] as const
+
+export type QuoteStatus = (typeof QUOTE_STATUSES)[number]['value']
+
+export const QUOTE_STATUS_VALUES = QUOTE_STATUSES.map((s) => s.value) as [
+  QuoteStatus,
+  ...QuoteStatus[],
+]
+
+export function quoteStatusMeta(value: string) {
+  return QUOTE_STATUSES.find((s) => s.value === value) ?? QUOTE_STATUSES[0]
+}

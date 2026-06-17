@@ -8,6 +8,7 @@ const TaskPatchSchema = z.object({
   title: z.string().min(1).max(300).optional(),
   category: z.enum(TASK_CATEGORY_VALUES).optional(),
   status: z.enum(TASK_STATUS_VALUES).optional(),
+  startDate: z.string().datetime().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
   done: z.boolean().optional(),
   note: z.string().max(1000).nullable().optional(),
@@ -43,7 +44,7 @@ export async function PATCH(
     if (!parsed.success) {
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
-    const { dueDate, done, status, ...rest } = parsed.data
+    const { startDate, dueDate, done, status, ...rest } = parsed.data
     // Keep `done` in sync with `status` (done = VALIDE). `status` wins when both
     // come in; a legacy `done` toggle maps to VALIDE / EN_ATTENTE.
     let donePatch: { status?: string; done: boolean; doneAt: Date | null } | null = null
@@ -57,6 +58,7 @@ export async function PATCH(
       where: { id: taskId },
       data: {
         ...rest,
+        ...(startDate !== undefined ? { startDate: startDate ? new Date(startDate) : null } : {}),
         ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
         ...(donePatch ?? {}),
       },

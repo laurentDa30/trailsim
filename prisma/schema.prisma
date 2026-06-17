@@ -90,6 +90,9 @@ model Task {
   // Pipeline status. `done` is kept in sync (done = status VALIDE) so existing
   // dashboard reminders keep working without a data migration.
   status    String    @default("EN_ATTENTE") // EN_ATTENTE | EN_COURS | VALIDE | IMPOSSIBLE
+  // Single deadline (jour J). For tasks that run over a period, startDate marks
+  // the beginning and dueDate the end (both optional, additive).
+  startDate DateTime?
   dueDate   DateTime?
   done      Boolean   @default(false)
   doneAt    DateTime?
@@ -104,7 +107,25 @@ model Task {
   parent    Task?     @relation("SubTasks", fields: [parentId], references: [id], onDelete: Cascade)
   children  Task[]    @relation("SubTasks")
   note      String?
+  quotes    TaskQuote[]
   createdAt DateTime  @default(now())
+}
+
+// A supplier/contact follow-up on a task (devis): who was contacted, the quote
+// amount, and where it stands. Lets an organiser track "j'ai contacté X, devis
+// reçu à Y €, accepté/refusé/en attente" per task (médailles, chrono, lots…).
+model TaskQuote {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  // Fournisseur / contact name.
+  label     String
+  // Quote amount in € (null = not received yet).
+  amount    Float?
+  // A_CONTACTER | CONTACTE | DEVIS_RECU | ACCEPTE | REFUSE
+  status    String   @default("A_CONTACTER")
+  note      String?
+  createdAt DateTime @default(now())
 }
 
 // A person attached to an event: co-organiser, volunteer… The record can exist
