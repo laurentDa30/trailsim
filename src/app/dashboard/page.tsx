@@ -50,6 +50,11 @@ export default async function DashboardPage() {
       members: {
         select: { role: true, status: true },
       },
+      // Expense lines only — tiny rows, summed for the card's budget reminder.
+      budgetItems: {
+        where: { type: "DEPENSE" },
+        select: { estimated: true, paid: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   })
@@ -59,7 +64,11 @@ export default async function DashboardPage() {
   const now = Date.now()
   const taskStatsMap = new Map<string, { overdue: number; pending: number; done: number }>()
   const volunteerMap = new Map<string, { validated: number; total: number }>()
+  const budgetMap = new Map<string, { estimated: number; real: number }>()
   for (const e of events) {
+    const estimated = e.budgetItems.reduce((s, b) => s + b.estimated, 0)
+    const real = e.budgetItems.reduce((s, b) => s + b.paid, 0)
+    budgetMap.set(e.id, { estimated, real })
     let overdue = 0
     let pending = 0
     let done = 0
@@ -241,6 +250,7 @@ export default async function DashboardPage() {
                 location={event.location}
                 taskStats={taskStatsMap.get(event.id) ?? null}
                 volunteers={volunteerMap.get(event.id) ?? null}
+                budget={budgetMap.get(event.id) ?? null}
                 races={event.races}
                 totalRunners={event.simulations[0]?.totalRunners ?? 0}
                 latestSimulation={

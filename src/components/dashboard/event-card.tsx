@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Calendar, MapPin, Play, BarChart2, Users, ClipboardList, Trash2 } from "lucide-react"
+import { Calendar, MapPin, Play, BarChart2, Users, ClipboardList, Wallet, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type SimulationStatus = "PENDING" | "RUNNING" | "DONE" | "ERROR"
@@ -38,6 +38,8 @@ interface EventCardProps {
   taskStats?: { overdue: number; pending: number; done: number } | null
   /** Volunteer counts (validated = accepted invite). null = no volunteers. */
   volunteers?: { validated: number; total: number } | null
+  /** Budget totals (estimated vs real spend). null = no budget lines. */
+  budget?: { estimated: number; real: number } | null
 }
 
 function StatusBadge({ status }: { status: SimulationStatus }) {
@@ -171,8 +173,11 @@ export function EventCard({
   latestSimulation,
   taskStats,
   volunteers,
+  budget,
 }: EventCardProps) {
   const router = useRouter()
+  const fmtEuro = (n: number) =>
+    new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €"
   const simStatus: SimulationStatus = latestSimulation?.status ?? "PENDING"
 
   // Days until the event (00:00-based, so "today" = 0 regardless of time).
@@ -199,6 +204,7 @@ export function EventCard({
 
   const hasTasks =
     taskStats != null && taskStats.overdue + taskStats.pending + taskStats.done > 0
+  const hasBudget = budget != null && (budget.estimated > 0 || budget.real > 0)
 
   async function handleDelete() {
     if (!confirm(`Supprimer l'événement « ${name} » et toutes ses simulations ? Cette action est irréversible.`)) return
@@ -314,8 +320,8 @@ export function EventCard({
         </div>
       )}
 
-      {/* Reminders: tasks + volunteers */}
-      {(hasTasks || (volunteers && volunteers.total > 0)) && (
+      {/* Reminders: tasks + volunteers + budget */}
+      {(hasTasks || (volunteers && volunteers.total > 0) || hasBudget) && (
         <div
           className="flex flex-col rounded-lg overflow-hidden"
           style={{ border: "1px solid var(--color-line)" }}
@@ -363,6 +369,23 @@ export function EventCard({
                     {volunteers.total - volunteers.validated} en attente
                   </span>
                 )}
+              </span>
+            </Link>
+          )}
+          {hasBudget && budget && (
+            <Link
+              href={`/events/${id}/budget`}
+              className="flex items-center justify-between gap-2 px-2.5 py-2 text-xs transition-colors hover:bg-[var(--color-bg-2)]"
+              style={hasTasks || (volunteers && volunteers.total > 0) ? { borderTop: "1px solid var(--color-line)" } : undefined}
+            >
+              <span className="flex items-center gap-1.5" style={{ color: "var(--color-ink-3)" }}>
+                <Wallet size={12} style={{ color: "var(--color-ink-4)" }} />
+                Budget
+              </span>
+              <span className="tabular-nums" style={{ color: "var(--color-ink-2)" }}>
+                est. {fmtEuro(budget.estimated)}
+                <span style={{ color: "var(--color-ink-4)" }}> · réel </span>
+                <b style={{ color: "var(--color-ink-2)" }}>{fmtEuro(budget.real)}</b>
               </span>
             </Link>
           )}
