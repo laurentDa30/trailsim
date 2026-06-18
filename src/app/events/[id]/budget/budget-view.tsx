@@ -33,7 +33,7 @@ interface BudgetViewProps {
   event: { id: string; name: string; location: string | null; date: string | null }
   initialItems: BudgetItem[]
   tasks: { id: string; title: string }[]
-  memberNames: string[]
+  members: { id: string; name: string }[]
   runnerCount: number
   canEdit: boolean
 }
@@ -68,7 +68,7 @@ function num(v: string): number {
   return isFinite(n) ? Math.max(0, n) : 0
 }
 
-export function BudgetView({ event, initialItems, tasks, memberNames, runnerCount, canEdit }: BudgetViewProps) {
+export function BudgetView({ event, initialItems, tasks, members, runnerCount, canEdit }: BudgetViewProps) {
   const [items, setItems] = useState<BudgetItem[]>(initialItems)
   const taskTitle = (id: string | null) => (id ? tasks.find((t) => t.id === id)?.title ?? null : null)
 
@@ -116,10 +116,13 @@ export function BudgetView({ event, initialItems, tasks, memberNames, runnerCoun
   ) {
     let taskId: string | null = null
     if (createTask) {
+      // Carry "Qui" over to the task's assignee when it matches a member.
+      const who = payload.who?.trim().toLowerCase()
+      const assignee = who ? members.find((m) => m.name.trim().toLowerCase() === who) : undefined
       const res = await fetch(`/api/events/${event.id}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: payload.label, category: 'GENERAL' }),
+        body: JSON.stringify({ title: payload.label, category: 'GENERAL', assigneeId: assignee?.id ?? null }),
       }).catch(() => null)
       if (res && res.ok) taskId = ((await res.json()) as { id: string }).id
     }
@@ -151,8 +154,8 @@ export function BudgetView({ event, initialItems, tasks, memberNames, runnerCoun
       />
 
       <datalist id="budget-members">
-        {memberNames.map((n) => (
-          <option key={n} value={n} />
+        {members.map((m) => (
+          <option key={m.id} value={m.name} />
         ))}
       </datalist>
 

@@ -35,7 +35,7 @@ export default async function BudgetPage({ params }: PageProps) {
 
   const members = await db.eventMember.findMany({
     where: { eventId: id },
-    select: { name: true },
+    select: { id: true, name: true },
     orderBy: { name: 'asc' },
   })
 
@@ -67,7 +67,7 @@ export default async function BudgetPage({ params }: PageProps) {
         taskId: i.taskId,
       }))}
       tasks={tasks}
-      memberNames={members.map((m) => m.name)}
+      members={members.map((m) => ({ id: m.id, name: m.name }))}
       runnerCount={latestSim?.totalRunners ?? 0}
       canEdit={canManage(access)}
     />
