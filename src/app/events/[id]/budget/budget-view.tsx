@@ -122,7 +122,14 @@ export function BudgetView({ event, initialItems, tasks, members, runnerCount, c
       const res = await fetch(`/api/events/${event.id}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: payload.label, category: 'GENERAL', assigneeId: assignee?.id ?? null }),
+        body: JSON.stringify({
+          title: payload.label,
+          category: 'GENERAL',
+          assigneeId: assignee?.id ?? null,
+          // Carry the budget amounts over to the task too.
+          amountEstimated: payload.estimated || null,
+          amountActual: payload.paid || null,
+        }),
       }).catch(() => null)
       if (res && res.ok) taskId = ((await res.json()) as { id: string }).id
     }
