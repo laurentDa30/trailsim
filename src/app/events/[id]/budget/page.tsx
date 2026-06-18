@@ -39,6 +39,13 @@ export default async function BudgetPage({ params }: PageProps) {
     orderBy: { name: 'asc' },
   })
 
+  // Runner count from the latest simulation — used for the "cost per runner".
+  const latestSim = await db.simulation.findFirst({
+    where: { eventId: id },
+    orderBy: { createdAt: 'desc' },
+    select: { totalRunners: true },
+  })
+
   return (
     <BudgetView
       event={{
@@ -61,6 +68,7 @@ export default async function BudgetPage({ params }: PageProps) {
       }))}
       tasks={tasks}
       memberNames={members.map((m) => m.name)}
+      runnerCount={latestSim?.totalRunners ?? 0}
       canEdit={canManage(access)}
     />
   )

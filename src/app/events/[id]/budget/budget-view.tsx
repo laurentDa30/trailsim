@@ -3,7 +3,18 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Topbar } from '@/components/layout/topbar'
+import { TASK_CATEGORIES } from '@/lib/tasks'
 import { WalletIcon, PlusIcon, Trash2Icon, ClipboardListIcon } from 'lucide-react'
+
+// Budget categories: the task categories (so budget & tasks line up) plus a few
+// budget-specific ones. Existing custom categories on the event are merged in.
+const BUDGET_CATEGORIES = [
+  ...TASK_CATEGORIES.map((c) => c.label),
+  'Solutions Web',
+  'Récompenses & lots',
+  'Salaires',
+  'Partenariats',
+]
 
 interface BudgetItem {
   id: string
@@ -23,7 +34,19 @@ interface BudgetViewProps {
   initialItems: BudgetItem[]
   tasks: { id: string; title: string }[]
   memberNames: string[]
+  runnerCount: number
   canEdit: boolean
+}
+
+// Distinct palette for the cost-distribution chart. Task categories keep their
+// own colour so budget & tasks stay visually consistent.
+const CHART_PALETTE = ['#7CB518', '#60A5FA', '#F87171', '#FBBF24', '#A78BFA', '#34D399', '#F472B6', '#FB923C', '#22D3EE', '#A3A3A3']
+function catColor(category: string): string {
+  const t = TASK_CATEGORIES.find((c) => c.label === category)
+  if (t) return t.color
+  let h = 0
+  for (let i = 0; i < category.length; i++) h = (h * 31 + category.charCodeAt(i)) >>> 0
+  return CHART_PALETTE[h % CHART_PALETTE.length]
 }
 
 const inputStyle: React.CSSProperties = {
@@ -45,7 +68,7 @@ function num(v: string): number {
   return isFinite(n) ? Math.max(0, n) : 0
 }
 
-export function BudgetView({ event, initialItems, tasks, memberNames, canEdit }: BudgetViewProps) {
+export function BudgetView({ event, initialItems, tasks, memberNames, runnerCount, canEdit }: BudgetViewProps) {
   const [items, setItems] = useState<BudgetItem[]>(initialItems)
   const taskTitle = (id: string | null) => (id ? tasks.find((t) => t.id === id)?.title ?? null : null)
 
@@ -55,9 +78,21 @@ export function BudgetView({ event, initialItems, tasks, memberNames, canEdit }:
   for (const i of depenses) if (!categories.includes(i.category)) categories.push(i.category)
 
   const totalEst = depenses.reduce((s, i) => s + i.estimated, 0)
-  const totalPaid = depenses.reduce((s, i) => s + i.paid, 0)
+  const totalReal = depenses.reduce((s, i) => s + i.paid, 0)
   const totalGains = gains.reduce((s, i) => s + i.estimated, 0)
   const global = totalGains - totalEst
+
+  // Cost distribution by category (estimation) for the doughnut + cost/runner.
+  const byCat = new Map<string, number>()
+  for (const i of depenses) {
+    const k = i.category || 'Sans catégorie'
+    byCat.set(k, (byCat.get(k) ?? 0) + i.estimated)
+  }
+  const chartSegments = [...byCat.entries()]
+    .filter(([, v]) => v > 0)
+    .map(([label, value]) => ({ label, value, color: catColor(label) }))
+    .sort((a, b) => b.value - a.value)
+  const costPerRunner = runnerCount > 0 ? totalEst / runnerCount : null
 
   // ── CRUD ──
   async function createItem(payload: Partial<BudgetItem> & { label: string; type: 'DEPENSE' | 'GAIN' }) {
@@ -131,16 +166,64 @@ export function BudgetView({ event, initialItems, tasks, memberNames, canEdit }:
         </p>
 
         {/* Top summary */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <Summary label="Total dépenses" value={fmtMoney(totalEst)} color="var(--color-danger, #DC2626)" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <Summary label="Dépenses estimées" value={fmtMoney(totalEst)} color="var(--color-danger, #DC2626)" />
+          <Summary label="Coût réel" value={fmtMoney(totalReal)} color="var(--color-warning)" />
           <Summary label="Total gains" value={fmtMoney(totalGains)} color="var(--color-safe, #16A34A)" />
           <Summary
-            label="Solde global"
+            label="Solde (gains − estimé)"
             value={fmtMoney(global)}
             color={global >= 0 ? 'var(--color-safe, #16A34A)' : 'var(--color-danger, #DC2626)'}
             strong
           />
         </div>
+
+        {/* Cost distribution + cost per runner */}
+        {chartSegments.length > 0 && (
+          <div className="grid md:grid-cols-2 gap-3 mb-2">
+            <div className="rounded-xl p-4" style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}>
+              <div className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--color-ink-4)' }}>
+                Répartition des dépenses (estimation)
+              </div>
+              <div className="flex items-center gap-4">
+                <BudgetDonut segments={chartSegments} total={totalEst} />
+                <div className="flex-1 flex flex-col gap-1 min-w-0">
+                  {chartSegments.map((s) => (
+                    <div key={s.label} className="flex items-center gap-2 text-xs">
+                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: s.color }} />
+                      <span className="truncate" style={{ color: 'var(--color-ink-2)' }}>{s.label}</span>
+                      <span className="ml-auto font-mono tabular-nums" style={{ color: 'var(--color-ink-3)' }}>
+                        {Math.round((s.value / totalEst) * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl p-4 flex flex-col justify-center" style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}>
+              <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-ink-4)' }}>
+                Coût par inscription coureur
+              </div>
+              {costPerRunner != null ? (
+                <>
+                  <div className="text-3xl font-bold font-mono" style={{ color: 'var(--color-ink)' }}>{fmtMoney(costPerRunner)}</div>
+                  <p className="text-xs mt-1" style={{ color: 'var(--color-ink-4)' }}>
+                    Dépenses estimées ({fmtMoney(totalEst)}) ÷ {runnerCount.toLocaleString('fr-FR')} coureurs.
+                  </p>
+                  {totalReal > 0 && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-ink-4)' }}>
+                      Coût réel : <b style={{ color: 'var(--color-ink-2)' }}>{fmtMoney(totalReal / runnerCount)}</b> / coureur.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs" style={{ color: 'var(--color-ink-4)' }}>
+                  Lancez une simulation pour estimer le nombre de coureurs et calculer le coût par inscription.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── DÉPENSES ── */}
         <SectionHeader>Dépenses</SectionHeader>
@@ -152,8 +235,7 @@ export function BudgetView({ event, initialItems, tasks, memberNames, canEdit }:
                 <Th right>Nombre</Th>
                 <Th>Société</Th>
                 <Th right>Estimation</Th>
-                <Th right>Payé</Th>
-                <Th right>Reste à payer</Th>
+                <Th right>Coût réel</Th>
                 <Th>Qui</Th>
                 <Th />
               </tr>
@@ -161,7 +243,7 @@ export function BudgetView({ event, initialItems, tasks, memberNames, canEdit }:
             <tbody>
               {categories.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-3 text-xs" style={{ color: 'var(--color-ink-4)' }}>
+                  <td colSpan={7} className="px-3 py-3 text-xs" style={{ color: 'var(--color-ink-4)' }}>
                     Aucune dépense. Ajoutez votre première ligne ci-dessous.
                   </td>
                 </tr>
@@ -191,7 +273,6 @@ export function BudgetView({ event, initialItems, tasks, memberNames, canEdit }:
                       <td />
                       <Money>{est}</Money>
                       <Money>{paid}</Money>
-                      <Money>{est - paid}</Money>
                       <td />
                       <td />
                     </tr>
@@ -203,8 +284,7 @@ export function BudgetView({ event, initialItems, tasks, memberNames, canEdit }:
                 <td />
                 <td />
                 <Money strong>{totalEst}</Money>
-                <Money strong>{totalPaid}</Money>
-                <Money strong>{totalEst - totalPaid}</Money>
+                <Money strong>{totalReal}</Money>
                 <td />
                 <td />
               </tr>
@@ -274,6 +354,40 @@ function Summary({ label, value, color, strong }: { label: string; value: string
   )
 }
 
+function BudgetDonut({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
+  const r = 54
+  const sw = 22
+  const C = 2 * Math.PI * r
+  const centerLabel = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(total) + ' €'
+  let offset = 0
+  return (
+    <svg width="132" height="132" viewBox="0 0 140 140" className="shrink-0">
+      <circle cx={70} cy={70} r={r} fill="none" stroke="var(--color-bg-2)" strokeWidth={sw} />
+      {segments.map((s) => {
+        const len = total > 0 ? (s.value / total) * C : 0
+        const el = (
+          <circle
+            key={s.label}
+            cx={70}
+            cy={70}
+            r={r}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={sw}
+            strokeDasharray={`${len} ${C - len}`}
+            strokeDashoffset={-offset}
+            transform="rotate(-90 70 70)"
+          />
+        )
+        offset += len
+        return el
+      })}
+      <text x={70} y={66} textAnchor="middle" fontSize="10" fill="var(--color-ink-4)">Total</text>
+      <text x={70} y={82} textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--color-ink)">{centerLabel}</text>
+    </svg>
+  )
+}
+
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="text-[11px] font-semibold uppercase tracking-wider mb-2 mt-6" style={{ color: 'var(--color-ink-3)' }}>
@@ -305,7 +419,7 @@ function CategoryBlock({ cat, children }: { cat: string; children: React.ReactNo
   return (
     <>
       <tr>
-        <td colSpan={8} className="px-3 pt-2.5 pb-1 text-xs font-semibold" style={{ color: 'var(--color-lime)' }}>
+        <td colSpan={7} className="px-3 pt-2.5 pb-1 text-xs font-semibold" style={{ color: 'var(--color-lime)' }}>
           {cat || 'Sans catégorie'}
         </td>
       </tr>
@@ -337,7 +451,6 @@ function ExpenseRow({
   const [est, setEst] = useState(String(item.estimated))
   const [paid, setPaid] = useState(String(item.paid))
   const [who, setWho] = useState(item.who ?? '')
-  const reste = num(est) - num(paid)
 
   if (!canEdit) {
     return (
@@ -347,7 +460,6 @@ function ExpenseRow({
         <td className="px-3 py-1.5 text-xs" style={{ color: 'var(--color-ink-3)' }}>{item.supplier ?? ''}</td>
         <Money>{item.estimated}</Money>
         <Money>{item.paid}</Money>
-        <Money>{item.estimated - item.paid}</Money>
         <td className="px-3 py-1.5 text-xs" style={{ color: 'var(--color-ink-3)' }}>{item.who ?? ''}</td>
         <td className="px-2">{taskTitle && <ClipboardListIcon size={13} style={{ color: 'var(--color-ink-4)' }} />}</td>
       </tr>
@@ -391,9 +503,6 @@ function ExpenseRow({
           onBlur={() => { const v = num(paid); if (v !== item.paid) onPatch({ paid: v }); setPaid(String(v)) }}
           style={{ ...inputStyle, textAlign: 'right' }}
         />
-      </td>
-      <td className="px-3 text-right font-mono text-xs whitespace-nowrap" style={{ color: reste > 0 ? 'var(--color-warning)' : 'var(--color-ink-3)' }}>
-        {fmtMoney(reste)}
       </td>
       <td className="px-1.5" style={{ width: 110 }}>
         <input
@@ -500,16 +609,20 @@ function AddExpenseForm({
       },
       createTask
     )
-    setCat(cat); setLabel(''); setQty(''); setSupplier(''); setEst(''); setPaid(''); setWho('')
+    setCat(''); setLabel(''); setQty(''); setSupplier(''); setEst(''); setPaid(''); setWho('')
   }
 
+  // Task categories + budget-specific ones + any custom category already used.
+  const catOptions = Array.from(new Set([...BUDGET_CATEGORIES, ...categories.filter(Boolean)]))
   const cell = 'px-2 py-1.5 rounded-md text-xs'
   const cellStyle: React.CSSProperties = { background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink)' }
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2 mb-2">
-      <input list="budget-cats" value={cat} onChange={(e) => setCat(e.target.value)} placeholder="Catégorie" className={`${cell} w-36`} style={cellStyle} />
-      <datalist id="budget-cats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+      <select value={cat} onChange={(e) => setCat(e.target.value)} className={`${cell} w-40`} style={cellStyle}>
+        <option value="">— Catégorie —</option>
+        {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
       <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Détail *" required className={`${cell} flex-1 min-w-[140px]`} style={cellStyle} />
       <input type="number" min={0} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Nb" className={`${cell} w-16`} style={cellStyle} />
       <input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Société" className={`${cell} w-32`} style={cellStyle} />
