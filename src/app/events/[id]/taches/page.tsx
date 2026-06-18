@@ -18,7 +18,13 @@ export default async function TachesPage({ params }: PageProps) {
 
   const event = await db.event.findUnique({
     where: { id },
-    select: { id: true, name: true, location: true, date: true },
+    select: {
+      id: true,
+      name: true,
+      location: true,
+      date: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
   })
   if (!event) notFound()
 
@@ -28,12 +34,20 @@ export default async function TachesPage({ params }: PageProps) {
     include: { quotes: { orderBy: { createdAt: 'asc' } } },
   })
 
-  // Bureau members the tasks can be assigned to (organisers first).
+  // People a task can be assigned to: the event owner (organiser, not stored as
+  // an EventMember) + the bureau members.
   const members = await db.eventMember.findMany({
     where: { eventId: id },
-    select: { id: true, name: true, role: true },
+    select: { id: true, name: true, role: true, userId: true },
     orderBy: [{ role: 'asc' }, { name: 'asc' }],
   })
+  const ownerIsMember = members.some((m) => m.userId === event.user.id)
+  const assignees = [
+    ...(ownerIsMember
+      ? []
+      : [{ id: event.user.id, name: event.user.name || event.user.email, role: 'ORGANISATEUR' }]),
+    ...members.map((m) => ({ id: m.id, name: m.name, role: m.role })),
+  ]
 
   return (
     <TachesView
@@ -64,7 +78,7 @@ export default async function TachesPage({ params }: PageProps) {
           note: q.note,
         })),
       }))}
-      members={members}
+      members={assignees}
       canEdit={canManage(access)}
     />
   )

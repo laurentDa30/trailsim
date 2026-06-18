@@ -18,7 +18,13 @@ export default async function BudgetPage({ params }: PageProps) {
 
   const event = await db.event.findUnique({
     where: { id },
-    select: { id: true, name: true, location: true, date: true },
+    select: {
+      id: true,
+      name: true,
+      location: true,
+      date: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
   })
   if (!event) notFound()
 
@@ -33,11 +39,17 @@ export default async function BudgetPage({ params }: PageProps) {
     orderBy: { createdAt: 'asc' },
   })
 
-  const members = await db.eventMember.findMany({
+  const memberRows = await db.eventMember.findMany({
     where: { eventId: id },
-    select: { id: true, name: true },
+    select: { id: true, name: true, userId: true },
     orderBy: { name: 'asc' },
   })
+  // Include the event owner (organiser) so "Qui" can target them too.
+  const ownerIsMember = memberRows.some((m) => m.userId === event.user.id)
+  const members = [
+    ...(ownerIsMember ? [] : [{ id: event.user.id, name: event.user.name || event.user.email }]),
+    ...memberRows.map((m) => ({ id: m.id, name: m.name })),
+  ]
 
   // Runner count from the latest simulation — used for the "cost per runner".
   const latestSim = await db.simulation.findFirst({
@@ -67,7 +79,7 @@ export default async function BudgetPage({ params }: PageProps) {
         taskId: i.taskId,
       }))}
       tasks={tasks}
-      members={members.map((m) => ({ id: m.id, name: m.name }))}
+      members={members}
       runnerCount={latestSim?.totalRunners ?? 0}
       canEdit={canManage(access)}
     />
