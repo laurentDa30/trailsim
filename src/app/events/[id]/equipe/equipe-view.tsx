@@ -500,7 +500,7 @@ export function EquipeView({
                   <span className="text-xs font-medium" style={{ color: 'var(--color-ink)' }}>{owner.name || owner.email}</span>
                   <div className="text-[10.5px]" style={{ color: 'var(--color-ink-4)' }}>{owner.email}</div>
                 </div>
-                <span className="text-[11px] shrink-0" style={{ color: 'var(--color-lime)' }}>Propriétaire</span>
+                <span className="text-[11px] shrink-0" style={{ color: 'var(--color-lime)' }}>Organisateur</span>
               </div>
               {organisers.map((m) => (
                 <MemberRow key={m.id} m={m} accent="var(--color-lime)" />
