@@ -58,6 +58,7 @@ interface EquipeViewProps {
   initialMembers: Member[]
   initialPartners: PartnerRow[]
   initialSections: SectionRow[]
+  targetVolunteers: number | null
   canEdit: boolean
 }
 
@@ -93,12 +94,23 @@ export function EquipeView({
   initialMembers,
   initialPartners,
   initialSections,
+  targetVolunteers,
   canEdit,
 }: EquipeViewProps) {
   const [members, setMembers] = useState<Member[]>(initialMembers)
   const [partners, setPartners] = useState<PartnerRow[]>(initialPartners)
   const [sections, setSections] = useState<SectionRow[]>(initialSections)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [target, setTarget] = useState<number | null>(targetVolunteers)
+
+  function saveTarget(value: number | null) {
+    setTarget(value)
+    fetch(`/api/events/${event.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetVolunteers: value }),
+    }).catch(() => {})
+  }
 
   // ── Member form ──
   const [mName, setMName] = useState('')
@@ -647,6 +659,47 @@ export function EquipeView({
             <StatRow label="Pôles" value={sections.length} />
             <StatRow label="Bénévoles sans pôle" value={unassignedVolunteers.length} color={unassignedVolunteers.length > 0 ? 'var(--color-warning)' : undefined} />
             <StatRow label="Partenaires" value={partners.length} />
+          </div>
+
+          {/* Volunteer headcount objective: what's needed vs what's missing. */}
+          <div className="rounded-lg p-3 flex flex-col gap-2" style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}>
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>Effectif bénévoles</span>
+            <div className="flex items-center justify-between text-xs">
+              <span style={{ color: 'var(--color-ink-3)' }}>Souhaités</span>
+              {canEdit ? (
+                <input
+                  type="number"
+                  min={0}
+                  value={target ?? ''}
+                  placeholder="—"
+                  onChange={(e) => saveTarget(e.target.value === '' ? null : Math.max(0, Math.round(Number(e.target.value))))}
+                  className="w-20 text-right font-mono tabular-nums rounded px-1.5 py-0.5 text-xs"
+                  style={inputStyle}
+                  aria-label="Effectif bénévoles souhaité"
+                />
+              ) : (
+                <span className="font-mono tabular-nums" style={{ color: 'var(--color-ink)' }}>{target ?? '—'}</span>
+              )}
+            </div>
+            <StatRow label="Validés" value={volunteers.length} color="var(--color-lime)" />
+            {target != null && (
+              <StatRow
+                label="Manque"
+                value={Math.max(0, target - volunteers.length)}
+                color={target - volunteers.length > 0 ? 'var(--color-warning)' : 'var(--color-safe)'}
+              />
+            )}
+            {target != null && target > 0 && (
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-line)' }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, Math.round((volunteers.length / target) * 100))}%`,
+                    background: target - volunteers.length > 0 ? 'var(--color-warning)' : 'var(--color-safe)',
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {sections.length > 0 && (

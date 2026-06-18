@@ -62,6 +62,9 @@ model Event {
   // starts at T0 + its startTime offset; used to show real arrival times in the
   // report's "FLUX D'ARRIVÉE" section. Null = times shown as T+ offsets only.
   startClock  String?
+  // Desired number of volunteers for the event (objectif d'effectif). Null = not
+  // set; the Équipe synthesis compares it to the validated count to show the gap.
+  targetVolunteers Int?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   userId      String

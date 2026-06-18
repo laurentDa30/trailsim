@@ -23,6 +23,7 @@ export default async function EquipePage({ params }: PageProps) {
       name: true,
       location: true,
       date: true,
+      targetVolunteers: true,
       user: { select: { name: true, email: true } },
       races: { select: { id: true, name: true, color: true, distance: true }, orderBy: { startTime: 'asc' } },
     },
@@ -53,6 +54,7 @@ export default async function EquipePage({ params }: PageProps) {
         date: event.date ? event.date.toISOString() : null,
       }}
       owner={{ name: event.user.name, email: event.user.email }}
+      targetVolunteers={event.targetVolunteers}
       races={event.races}
       initialMembers={members.map((m) => {
         let raceIds: string[] = []

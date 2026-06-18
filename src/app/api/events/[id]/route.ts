@@ -11,6 +11,7 @@ const EventPatchSchema = z.object({
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Format attendu HH:MM")
     .nullable()
     .optional(),
+  targetVolunteers: z.number().int().nonnegative().nullable().optional(),
 })
 
 export async function GET(
