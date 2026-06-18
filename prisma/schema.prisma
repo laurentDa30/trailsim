@@ -72,6 +72,7 @@ model Event {
   partners    Partner[]
   tasks       Task[]
   sections    Section[]
+  budgetItems BudgetItem[]
   // Field staffing plan (postes), durable at the event level so it survives
   // across simulations and trace edits. JSON: PlacedLogi[] (geo coords +
   // optional assigned EventMember). If a trace changes, a poste keeps its
@@ -154,6 +155,28 @@ model EventMember {
   createdAt   DateTime @default(now())
 
   @@unique([eventId, userId])
+}
+
+// A single line of the event budget — an expense (DEPENSE) or a revenue (GAIN).
+// Expenses are grouped by `category` in the UI (Logistique, Solutions Web,
+// Salaires…); "reste à payer" is derived (estimated − paid). A line can link to
+// a Task (plain ref, resolved in the UI; no cascade) so budget and to-dos stay
+// in sync.
+model BudgetItem {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  type      String   @default("DEPENSE") // DEPENSE | GAIN
+  category  String   @default("")        // group header for expenses
+  label     String                        // détail / fonction / source du gain
+  quantity  Int?                          // nombre
+  supplier  String?                       // détails société / nom (salaire)
+  estimated Float    @default(0)          // estimation / montant du gain
+  paid      Float    @default(0)          // payé (dépense)
+  who       String?                       // qui
+  taskId    String?                       // optional linked Task id
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 }
 
 // An organisation pôle/secteur (retrait dossards, buvette, balisage…). Led by an

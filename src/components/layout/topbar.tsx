@@ -11,7 +11,7 @@ import { isAdminEmail } from '@/lib/admin'
 type StatusKey = 'config' | 'sim' | 'results'
 
 interface TopbarProps {
-  activePage: 'dashboard' | 'config' | 'simulate' | 'results' | 'equipe' | 'taches'
+  activePage: 'dashboard' | 'config' | 'simulate' | 'results' | 'equipe' | 'budget' | 'taches'
   eventId?: string
   eventName?: string
   eventDate?: string
