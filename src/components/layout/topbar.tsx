@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon, LogOut, ShieldCheck } from 'lucide-react'
+import { FileTextIcon, Share2Icon, MapPinIcon, CalendarIcon, LogOut, ShieldCheck, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { PageNav, MobileNav } from './page-nav'
@@ -45,8 +45,39 @@ export function Topbar({
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Derive avatar initials from the signed-in user (name → "JD", else email).
-  const { data: sessionData } = useSession()
+  const { data: sessionData, update } = useSession()
   const isAdmin = isAdminEmail(sessionData?.user?.email)
+
+  // Profile editor (display name).
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
+
+  function openProfile() {
+    setNameDraft(sessionData?.user?.name ?? '')
+    setMenuOpen(false)
+    setProfileOpen(true)
+  }
+
+  async function saveProfile(e: React.FormEvent) {
+    e.preventDefault()
+    const v = nameDraft.trim()
+    if (!v || savingName) return
+    setSavingName(true)
+    try {
+      const res = await fetch('/api/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: v }),
+      })
+      if (res.ok) {
+        await update({ name: v })
+        setProfileOpen(false)
+      }
+    } finally {
+      setSavingName(false)
+    }
+  }
   const initials = useMemo(() => {
     if (userInitials) return userInitials
     const name = sessionData?.user?.name?.trim()
@@ -233,6 +264,16 @@ export function Topbar({
               </Link>
             )}
             <button
+              onClick={openProfile}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors"
+              style={{ color: 'var(--color-ink-2)', borderBottom: '1px solid var(--color-line)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-2)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <User size={14} style={{ color: 'var(--color-ink-4)' }} />
+              Modifier mon profil
+            </button>
+            <button
               onClick={() => signOut({ callbackUrl: '/login' })}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors"
               style={{ color: 'var(--color-ink-2)' }}
@@ -245,6 +286,48 @@ export function Topbar({
           </div>
         )}
       </div>
+
+      {profileOpen && (
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.45)', zIndex: 3000 }}
+          onMouseDown={() => setProfileOpen(false)}
+        >
+          <form
+            onSubmit={saveProfile}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-xl p-5 flex flex-col gap-3"
+            style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}
+          >
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>Mon profil</h2>
+            <label className="text-xs" style={{ color: 'var(--color-ink-3)' }}>Nom et prénom</label>
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="Votre nom"
+              className="px-3 py-2 rounded-md text-sm"
+              style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)', color: 'var(--color-ink)' }}
+            />
+            {sessionData?.user?.email && (
+              <p className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>{sessionData.user.email}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-1">
+              <button type="button" onClick={() => setProfileOpen(false)} className="px-3 py-1.5 rounded-md text-xs" style={{ color: 'var(--color-ink-3)' }}>
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={savingName || !nameDraft.trim()}
+                className="px-3 py-1.5 rounded-md text-xs font-medium"
+                style={{ background: 'var(--color-lime)', color: '#ffffff', opacity: savingName || !nameDraft.trim() ? 0.6 : 1 }}
+              >
+                {savingName ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </header>
   )
 }

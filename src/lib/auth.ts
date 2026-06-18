@@ -43,10 +43,15 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
     signIn: "/login",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id
         if (user.name) token.name = user.name
+      }
+      // Reflect a profile name change (via useSession().update({ name })) without
+      // forcing a re-login.
+      if (trigger === "update" && session && typeof session.name === "string") {
+        token.name = session.name
       }
       return token
     },
