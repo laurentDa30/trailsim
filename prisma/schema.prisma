@@ -177,6 +177,7 @@ model BudgetItem {
   estimated Float    @default(0)          // estimation / montant du gain
   paid      Float    @default(0)          // payé (dépense)
   who       String?                       // qui
+  documentUrl String?                     // link to a devis/facture/contrat
   taskId    String?                       // optional linked Task id
   order     Int      @default(0)
   createdAt DateTime @default(now())

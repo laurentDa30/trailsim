@@ -12,6 +12,7 @@ const ItemCreateSchema = z.object({
   estimated: z.number().nonnegative().optional(),
   paid: z.number().nonnegative().optional(),
   who: z.string().max(120).nullable().optional(),
+  documentUrl: z.string().max(2000).nullable().optional(),
   taskId: z.string().nullable().optional(),
 })
 
@@ -65,6 +66,7 @@ export async function POST(
         estimated: d.estimated ?? 0,
         paid: d.paid ?? 0,
         who: d.who ?? null,
+        documentUrl: d.documentUrl ?? null,
         taskId: d.taskId ?? null,
       },
     })

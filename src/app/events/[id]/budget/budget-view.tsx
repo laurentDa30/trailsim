@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Topbar } from '@/components/layout/topbar'
 import { TASK_CATEGORIES } from '@/lib/tasks'
-import { WalletIcon, PlusIcon, Trash2Icon, ClipboardListIcon } from 'lucide-react'
+import { WalletIcon, PlusIcon, Trash2Icon, ClipboardListIcon, Paperclip, Pencil } from 'lucide-react'
 
 // Budget categories: the task categories (so budget & tasks line up) plus a few
 // budget-specific ones. Existing custom categories on the event are merged in.
@@ -26,6 +26,7 @@ interface BudgetItem {
   estimated: number
   paid: number
   who: string | null
+  documentUrl: string | null
   taskId: string | null
 }
 
@@ -111,7 +112,7 @@ export function BudgetView({ event, initialItems, tasks, members, runnerCount, c
 
   /** Add an expense, optionally creating a linked task first. */
   async function addExpense(
-    payload: Omit<BudgetItem, 'id' | 'type' | 'taskId'>,
+    payload: Omit<BudgetItem, 'id' | 'type' | 'taskId' | 'documentUrl'>,
     createTask: boolean
   ) {
     let taskId: string | null = null
@@ -471,9 +472,23 @@ function ExpenseRow({
         <Money>{item.estimated}</Money>
         <Money>{item.paid}</Money>
         <td className="px-3 py-1.5 text-xs" style={{ color: 'var(--color-ink-3)' }}>{item.who ?? ''}</td>
-        <td className="px-2">{taskTitle && <ClipboardListIcon size={13} style={{ color: 'var(--color-ink-4)' }} />}</td>
+        <td className="px-2 whitespace-nowrap">
+          <div className="flex items-center gap-0.5">
+            {item.documentUrl && (
+              <a href={item.documentUrl} target="_blank" rel="noopener noreferrer" title="Ouvrir le document" className="p-1" style={{ color: 'var(--color-lime)' }}>
+                <Paperclip size={13} />
+              </a>
+            )}
+            {taskTitle && <ClipboardListIcon size={13} style={{ color: 'var(--color-ink-4)' }} />}
+          </div>
+        </td>
       </tr>
     )
+  }
+
+  function editDoc() {
+    const u = window.prompt('Lien du document (devis, facture, contrat… — laisser vide pour retirer)', item.documentUrl ?? '')
+    if (u !== null) onPatch({ documentUrl: u.trim() || null })
   }
 
   return (
@@ -521,8 +536,23 @@ function ExpenseRow({
           style={inputStyle}
         />
       </td>
-      <td className="px-1.5 whitespace-nowrap" style={{ width: 60 }}>
+      <td className="px-1.5 whitespace-nowrap" style={{ width: 92 }}>
         <div className="flex items-center gap-0.5">
+          {item.documentUrl && (
+            <a href={item.documentUrl} target="_blank" rel="noopener noreferrer" title="Ouvrir le document" className="p-1" style={{ color: 'var(--color-lime)' }}>
+              <Paperclip size={13} />
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={editDoc}
+            title={item.documentUrl ? 'Modifier / retirer le lien du document' : 'Ajouter un lien (devis, facture…)'}
+            aria-label="Lien document"
+            className="p-1"
+            style={{ color: item.documentUrl ? 'var(--color-ink-3)' : 'var(--color-ink-4)' }}
+          >
+            <Pencil size={12} />
+          </button>
           {taskTitle && (
             <Link href={`/events/${eventId}/taches`} title={`Tâche liée : ${taskTitle}`} className="p-1">
               <ClipboardListIcon size={13} style={{ color: 'var(--color-lime)' }} />
@@ -593,7 +623,7 @@ function AddExpenseForm({
   onAdd,
 }: {
   categories: string[]
-  onAdd: (payload: Omit<BudgetItem, 'id' | 'type' | 'taskId'>, createTask: boolean) => void
+  onAdd: (payload: Omit<BudgetItem, 'id' | 'type' | 'taskId' | 'documentUrl'>, createTask: boolean) => void
 }) {
   const [cat, setCat] = useState('')
   const [label, setLabel] = useState('')

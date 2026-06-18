@@ -76,6 +76,7 @@ export default async function BudgetPage({ params }: PageProps) {
         estimated: i.estimated,
         paid: i.paid,
         who: i.who,
+        documentUrl: i.documentUrl,
         taskId: i.taskId,
       }))}
       tasks={tasks}

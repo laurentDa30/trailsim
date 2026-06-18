@@ -11,6 +11,7 @@ const ItemPatchSchema = z.object({
   estimated: z.number().nonnegative().optional(),
   paid: z.number().nonnegative().optional(),
   who: z.string().max(120).nullable().optional(),
+  documentUrl: z.string().max(2000).nullable().optional(),
   taskId: z.string().nullable().optional(),
 })
 
