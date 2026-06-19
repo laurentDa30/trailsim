@@ -18,6 +18,7 @@ import {
   MapIcon,
 } from 'lucide-react'
 import { DeleteSimButton } from './delete-sim-button'
+import { RenameSimButton } from './rename-sim-button'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -164,6 +165,7 @@ export default async function SimulationsHistoryPage({ params }: PageProps) {
                       <span className="text-sm font-semibold truncate" style={{ color: 'var(--color-ink)' }}>
                         {sim.name}
                       </span>
+                      <RenameSimButton simId={sim.id} simName={sim.name} />
                       <Badge variant={st.variant}>{st.label}</Badge>
                       {staggered && <Badge variant="warning">départs décalés</Badge>}
                     </div>

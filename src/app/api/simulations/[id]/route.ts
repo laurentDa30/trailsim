@@ -5,6 +5,7 @@ import { encodeSnapshot, decodeSnapshotString } from "@/lib/sim-snapshot"
 import { z } from "zod"
 
 const SimulationUpdateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
   status: z.string().optional(),
   resultSnapshot: z.record(z.string(), z.unknown()).optional(),
   riskMap: z.record(z.string(), z.unknown()).optional(),
@@ -81,11 +82,12 @@ export async function PATCH(
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
 
-    const { status, resultSnapshot, riskMap } = parsed.data
+    const { name, status, resultSnapshot, riskMap } = parsed.data
 
     const updated = await db.simulation.update({
       where: { id },
       data: {
+        ...(name !== undefined && { name: name.trim() }),
         ...(status !== undefined && { status }),
         ...(resultSnapshot !== undefined && { resultSnapshot: encodeSnapshot(resultSnapshot) }),
         ...(riskMap !== undefined && { riskMap: JSON.stringify(riskMap) }),
