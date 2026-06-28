@@ -7,6 +7,7 @@ const ItemPatchSchema = z.object({
   category: z.string().max(120).optional(),
   label: z.string().min(1).max(200).optional(),
   quantity: z.number().int().nonnegative().nullable().optional(),
+  unitPrice: z.number().nonnegative().nullable().optional(),
   supplier: z.string().max(200).nullable().optional(),
   estimated: z.number().nonnegative().optional(),
   paid: z.number().nonnegative().optional(),

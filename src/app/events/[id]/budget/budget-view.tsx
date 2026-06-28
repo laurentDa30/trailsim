@@ -22,6 +22,7 @@ interface BudgetItem {
   category: string
   label: string
   quantity: number | null
+  unitPrice: number | null
   supplier: string | null
   estimated: number
   paid: number
@@ -112,7 +113,7 @@ export function BudgetView({ event, initialItems, tasks, members, runnerCount, c
 
   /** Add an expense, optionally creating a linked task first. */
   async function addExpense(
-    payload: Omit<BudgetItem, 'id' | 'type' | 'taskId' | 'documentUrl'>,
+    payload: Omit<BudgetItem, 'id' | 'type' | 'taskId' | 'documentUrl' | 'unitPrice'>,
     createTask: boolean
   ) {
     let taskId: string | null = null
@@ -307,10 +308,12 @@ export function BudgetView({ event, initialItems, tasks, members, runnerCount, c
         {/* ── GAINS ── */}
         <SectionHeader>Gains</SectionHeader>
         <div className="rounded-xl overflow-x-auto mb-2" style={{ border: '1px solid var(--color-line)', background: 'var(--color-bg-1)' }}>
-          <table className="w-full" style={{ borderCollapse: 'collapse', minWidth: 420 }}>
+          <table className="w-full" style={{ borderCollapse: 'collapse', minWidth: 560 }}>
             <thead>
               <tr>
                 <Th>Source</Th>
+                <Th right>Quantité</Th>
+                <Th right>Prix unitaire</Th>
                 <Th right>Montant</Th>
                 <Th />
               </tr>
@@ -318,7 +321,7 @@ export function BudgetView({ event, initialItems, tasks, members, runnerCount, c
             <tbody>
               {gains.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-3 py-3 text-xs" style={{ color: 'var(--color-ink-4)' }}>
+                  <td colSpan={5} className="px-3 py-3 text-xs" style={{ color: 'var(--color-ink-4)' }}>
                     Aucun gain enregistré.
                   </td>
                 </tr>
@@ -328,13 +331,21 @@ export function BudgetView({ event, initialItems, tasks, members, runnerCount, c
               ))}
               <tr style={{ borderTop: '2px solid var(--color-line)' }}>
                 <td className="px-3 py-2 text-xs font-bold" style={{ color: 'var(--color-ink)' }}>Total gains</td>
+                <td />
+                <td />
                 <Money strong>{totalGains}</Money>
                 <td />
               </tr>
             </tbody>
           </table>
         </div>
-        {canEdit && <AddGainForm onAdd={(label, amount) => createItem({ type: 'GAIN', label, estimated: amount })} />}
+        {canEdit && (
+          <AddGainForm
+            onAdd={(label, quantity, unitPrice, amount) =>
+              createItem({ type: 'GAIN', label, quantity, unitPrice, estimated: amount })
+            }
+          />
+        )}
 
         {/* ── SOLDE ── */}
         <div
@@ -579,12 +590,30 @@ function GainRow({
   onRemove: () => void
 }) {
   const [label, setLabel] = useState(item.label)
+  const [qty, setQty] = useState(item.quantity != null ? String(item.quantity) : '')
+  const [unit, setUnit] = useState(item.unitPrice != null ? String(item.unitPrice) : '')
   const [amount, setAmount] = useState(String(item.estimated))
+
+  // When both quantity and unit price are set, the amount is auto-computed.
+  const qN = qty.trim() === '' ? null : Math.max(0, Math.round(Number(qty)))
+  const uN = unit.trim() === '' ? null : num(unit)
+  const auto = qN != null && uN != null
+  const computed = auto ? qN * uN : null
+  const shownAmount = auto ? fmtMoney(computed!) : null
+
+  // Push quantity/unit changes, recomputing the stored amount when both are set.
+  function commitQtyUnit(nextQty: number | null, nextUnit: number | null) {
+    const body: Partial<BudgetItem> = { quantity: nextQty, unitPrice: nextUnit }
+    if (nextQty != null && nextUnit != null) body.estimated = nextQty * nextUnit
+    onPatch(body)
+  }
 
   if (!canEdit) {
     return (
       <tr style={{ borderTop: '1px solid var(--color-line)' }}>
         <td className="px-3 py-1.5 text-xs" style={{ color: 'var(--color-ink)' }}>{item.label}</td>
+        <td className="px-3 py-1.5 text-xs text-right" style={{ color: 'var(--color-ink-3)' }}>{item.quantity ?? ''}</td>
+        <td className="px-3 py-1.5 text-xs text-right" style={{ color: 'var(--color-ink-3)' }}>{item.unitPrice != null ? fmtMoney(item.unitPrice) : ''}</td>
         <Money>{item.estimated}</Money>
         <td />
       </tr>
@@ -600,12 +629,34 @@ function GainRow({
           style={inputStyle}
         />
       </td>
-      <td className="px-1.5" style={{ width: 120 }}>
+      <td className="px-1.5" style={{ width: 80 }}>
         <input
-          type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
-          onBlur={() => { const v = num(amount); if (v !== item.estimated) onPatch({ estimated: v }); setAmount(String(v)) }}
+          type="number" min={0} value={qty} onChange={(e) => setQty(e.target.value)}
+          onBlur={() => { const v = qty.trim() === '' ? null : Math.max(0, Math.round(Number(qty))); if (v !== item.quantity) commitQtyUnit(v, uN) }}
+          placeholder="—"
           style={{ ...inputStyle, textAlign: 'right' }}
         />
+      </td>
+      <td className="px-1.5" style={{ width: 100 }}>
+        <input
+          type="number" min={0} step="0.01" value={unit} onChange={(e) => setUnit(e.target.value)}
+          onBlur={() => { const v = unit.trim() === '' ? null : num(unit); if (v !== item.unitPrice) commitQtyUnit(qN, v) }}
+          placeholder="—"
+          style={{ ...inputStyle, textAlign: 'right' }}
+        />
+      </td>
+      <td className="px-1.5" style={{ width: 110 }}>
+        {auto ? (
+          <div className="text-right font-mono text-xs py-1 pr-1" style={{ color: 'var(--color-ink-2)' }} title="Calculé : quantité × prix unitaire">
+            {shownAmount}
+          </div>
+        ) : (
+          <input
+            type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
+            onBlur={() => { const v = num(amount); if (v !== item.estimated) onPatch({ estimated: v }); setAmount(String(v)) }}
+            style={{ ...inputStyle, textAlign: 'right' }}
+          />
+        )}
       </td>
       <td className="px-1.5" style={{ width: 44 }}>
         <button type="button" onClick={onRemove} aria-label="Supprimer" className="p-1" style={{ color: 'var(--color-danger, #DC2626)' }}>
@@ -623,7 +674,7 @@ function AddExpenseForm({
   onAdd,
 }: {
   categories: string[]
-  onAdd: (payload: Omit<BudgetItem, 'id' | 'type' | 'taskId' | 'documentUrl'>, createTask: boolean) => void
+  onAdd: (payload: Omit<BudgetItem, 'id' | 'type' | 'taskId' | 'documentUrl' | 'unitPrice'>, createTask: boolean) => void
 }) {
   const [cat, setCat] = useState('')
   const [label, setLabel] = useState('')
@@ -680,15 +731,27 @@ function AddExpenseForm({
   )
 }
 
-function AddGainForm({ onAdd }: { onAdd: (label: string, amount: number) => void }) {
+function AddGainForm({
+  onAdd,
+}: {
+  onAdd: (label: string, quantity: number | null, unitPrice: number | null, amount: number) => void
+}) {
   const [label, setLabel] = useState('')
+  const [qty, setQty] = useState('')
+  const [unit, setUnit] = useState('')
   const [amount, setAmount] = useState('')
+
+  const qN = qty.trim() === '' ? null : Math.max(0, Math.round(Number(qty)))
+  const uN = unit.trim() === '' ? null : num(unit)
+  const auto = qN != null && uN != null
+  const computed = auto ? qN * uN : null
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!label.trim()) return
-    onAdd(label.trim(), num(amount))
-    setLabel(''); setAmount('')
+    // Quantity × unit price wins; otherwise the manual amount.
+    onAdd(label.trim(), qN, uN, auto ? computed! : num(amount))
+    setLabel(''); setQty(''); setUnit(''); setAmount('')
   }
 
   const cell = 'px-2 py-1.5 rounded-md text-xs'
@@ -697,7 +760,18 @@ function AddGainForm({ onAdd }: { onAdd: (label: string, amount: number) => void
   return (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2 mb-2">
       <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Source du gain * (sponsor, inscriptions…)" required className={`${cell} flex-1 min-w-[180px]`} style={cellStyle} />
-      <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Montant €" className={`${cell} w-28`} style={cellStyle} />
+      <input type="number" min={0} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Quantité" className={`${cell} w-24`} style={cellStyle} title="Quantité (ex. nombre d'inscriptions)" />
+      <input type="number" min={0} step="0.01" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Prix unit. €" className={`${cell} w-28`} style={cellStyle} title="Prix unitaire" />
+      <input
+        type="number" min={0} step="0.01"
+        value={auto ? String(computed) : amount}
+        onChange={(e) => setAmount(e.target.value)}
+        disabled={auto}
+        placeholder="Montant €"
+        className={`${cell} w-28`}
+        style={{ ...cellStyle, opacity: auto ? 0.7 : 1 }}
+        title={auto ? 'Calculé automatiquement (quantité × prix unitaire)' : 'Montant (si pas de quantité × prix)'}
+      />
       <button type="submit" className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium" style={{ background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)', color: 'var(--color-lime)', border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)' }}>
         <PlusIcon size={13} /> Ajouter
       </button>

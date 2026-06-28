@@ -72,6 +72,7 @@ export default async function BudgetPage({ params }: PageProps) {
         category: i.category,
         label: i.label,
         quantity: i.quantity,
+        unitPrice: i.unitPrice,
         supplier: i.supplier,
         estimated: i.estimated,
         paid: i.paid,

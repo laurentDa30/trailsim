@@ -173,6 +173,7 @@ model BudgetItem {
   category  String   @default("")        // group header for expenses
   label     String                        // détail / fonction / source du gain
   quantity  Int?                          // nombre
+  unitPrice Float?                        // prix unitaire (gain calculé qty × PU)
   supplier  String?                       // détails société / nom (salaire)
   estimated Float    @default(0)          // estimation / montant du gain
   paid      Float    @default(0)          // payé (dépense)
