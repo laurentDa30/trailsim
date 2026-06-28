@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { DeleteSimButton } from './delete-sim-button'
 import { RenameSimButton } from './rename-sim-button'
+import { ShareSimButton } from './share-sim-button'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -215,6 +216,7 @@ export default async function SimulationsHistoryPage({ params }: PageProps) {
                     <DeleteSimButton simId={sim.id} simName={sim.name} />
                     {isDone ? (
                       <>
+                        <ShareSimButton simId={sim.id} initialToken={sim.shareToken} />
                         <Link
                           href={`/events/${event.id}/report/${sim.id}`}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"

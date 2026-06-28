@@ -271,6 +271,9 @@ model Simulation {
   nRuns          Int             @default(100)
   resultSnapshot String?
   riskMap        String?
+  // Public read-only share token. Null = not shared. When set, /r/<token> shows
+  // the results without auth and without any edit capability.
+  shareToken     String?         @unique
   logistique     String          @default("[]")
   peloton        String?
   // Snapshot of the courses' départs at launch time (JSON: [{id,name,distance,startTime}]),

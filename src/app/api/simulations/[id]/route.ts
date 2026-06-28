@@ -9,6 +9,8 @@ const SimulationUpdateSchema = z.object({
   status: z.string().optional(),
   resultSnapshot: z.record(z.string(), z.unknown()).optional(),
   riskMap: z.record(z.string(), z.unknown()).optional(),
+  // true → enable a public read-only share link; false → revoke it.
+  share: z.boolean().optional(),
 })
 
 export async function GET(
@@ -82,7 +84,14 @@ export async function PATCH(
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
 
-    const { name, status, resultSnapshot, riskMap } = parsed.data
+    const { name, status, resultSnapshot, riskMap, share } = parsed.data
+
+    let shareData: { shareToken?: string | null } = {}
+    if (share === true) {
+      shareData = { shareToken: simulation.shareToken ?? crypto.randomUUID() }
+    } else if (share === false) {
+      shareData = { shareToken: null }
+    }
 
     const updated = await db.simulation.update({
       where: { id },
@@ -91,7 +100,9 @@ export async function PATCH(
         ...(status !== undefined && { status }),
         ...(resultSnapshot !== undefined && { resultSnapshot: encodeSnapshot(resultSnapshot) }),
         ...(riskMap !== undefined && { riskMap: JSON.stringify(riskMap) }),
+        ...shareData,
       },
+      select: { id: true, status: true, shareToken: true },
     })
 
     return Response.json(updated)

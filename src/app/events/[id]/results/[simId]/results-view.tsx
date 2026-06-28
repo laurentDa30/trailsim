@@ -86,6 +86,8 @@ export interface ResultsViewProps {
     baseSpeedMin?: number
     baseSpeedMax?: number
   }[]
+  /** Public read-only view (shared link): hide editing + the app topbar. */
+  readOnly?: boolean
 }
 
 function formatTimeHHMM(seconds: number): string {
@@ -241,6 +243,7 @@ export function ResultsView({
   runnerProfiles,
   implantation,
   members = [],
+  readOnly = false,
 }: ResultsViewProps) {
   const [visibleRaces, setVisibleRaces] = useState<Set<string>>(
     () => new Set(races.map((r) => r.id))
@@ -330,6 +333,7 @@ export function ResultsView({
   // we don't immediately re-save the freshly loaded plan.
   const implantationLoaded = useRef(false)
   useEffect(() => {
+    if (readOnly) return // shared read-only view never persists
     if (!implantationLoaded.current) {
       implantationLoaded.current = true
       return
@@ -344,7 +348,7 @@ export function ResultsView({
       })
     }, 600)
     return () => clearTimeout(t)
-  }, [placedLogistics, event.id])
+  }, [placedLogistics, event.id, readOnly])
 
   const placeLogi = useCallback(
     (lat: number, lng: number) => {
@@ -547,15 +551,35 @@ export function ResultsView({
       className="flex flex-col min-h-screen md:h-screen"
       style={{ background: 'var(--color-bg)', color: 'var(--color-ink)' }}
     >
-      {/* Topbar */}
-      <Topbar
-        activePage="results"
-        eventId={event.id}
-        eventName={event.name}
-        eventLocation={event.location ?? undefined}
-        status="results"
-        exportHref={`/events/${event.id}/report/${simulation.id}`}
-      />
+      {/* Topbar (app nav) — or a minimal public header for shared read-only links */}
+      {readOnly ? (
+        <header
+          className="flex items-center gap-3 px-4 shrink-0"
+          style={{ height: 52, background: 'var(--color-bg-1)', borderBottom: '1px solid var(--color-line)' }}
+        >
+          <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
+            Trail<b style={{ color: 'var(--color-lime)', fontWeight: 700 }}>Sim</b>
+          </span>
+          <span className="text-[13px] truncate" style={{ color: 'var(--color-ink-2)' }}>
+            {event.name} · {simulation.name}
+          </span>
+          <span
+            className="ml-auto text-[11px] px-2 py-0.5 rounded-full shrink-0"
+            style={{ color: 'var(--color-ink-3)', background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}
+          >
+            Lecture seule
+          </span>
+        </header>
+      ) : (
+        <Topbar
+          activePage="results"
+          eventId={event.id}
+          eventName={event.name}
+          eventLocation={event.location ?? undefined}
+          status="results"
+          exportHref={`/events/${event.id}/report/${simulation.id}`}
+        />
+      )}
 
       {/* Main content */}
       <div className="flex flex-col md:flex-row flex-1 min-h-0">
@@ -1188,7 +1212,8 @@ export function ResultsView({
             </div>
           </Section>
 
-          {/* LOGISTIQUE TERRAIN section */}
+          {/* LOGISTIQUE TERRAIN section — editing tool, hidden in read-only share */}
+          {!readOnly && (
           <Section
             icon={<MapPinIcon size={12} />}
             label="Logistique terrain"
@@ -1325,6 +1350,7 @@ export function ResultsView({
               )}
             </div>
           </Section>
+          )}
 
           {/* Bottom spacer */}
           <div className="flex-1" />
