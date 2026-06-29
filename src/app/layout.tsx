@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="fr" data-theme="dark" className={`${inter.variable} h-full`}>
+    <html lang="fr" data-theme="light" className={`${inter.variable} h-full`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

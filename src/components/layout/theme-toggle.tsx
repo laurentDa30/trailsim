@@ -6,13 +6,13 @@ import { SunIcon, MoonIcon } from 'lucide-react'
 const STORAGE_KEY = 'trailsim:theme'
 
 export function ThemeToggle({ className }: { className?: string }) {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [theme, setTheme] = useState<'dark' | 'light'>('light')
 
   // Sync from the DOM (set by the no-flash script) on mount
   useEffect(() => {
     const current = document.documentElement.getAttribute('data-theme')
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTheme(current === 'light' ? 'light' : 'dark')
+    setTheme(current === 'dark' ? 'dark' : 'light')
   }, [])
 
   function toggle() {
