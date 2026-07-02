@@ -467,7 +467,7 @@ export function TachesView({ event, initialTasks, members, canEdit }: TachesView
   const [category, setCategory] = useState('GENERAL')
   const [due, setDue] = useState('')
   const [busy, setBusy] = useState(false)
-  const [calSpan, setCalSpan] = useState<number>(1)
+  const [calSpan, setCalSpan] = useState<number>(2)
   const [calMonth, setCalMonth] = useState<Date>(() => {
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
