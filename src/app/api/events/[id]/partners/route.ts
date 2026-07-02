@@ -1,15 +1,22 @@
 import { auth } from "@/lib/auth"
 import db from "@/lib/db"
 import { getEventAccess, canManage, canRead } from "@/lib/authz"
+import { PARTNER_KIND_VALUES, PARTNER_STATUS_VALUES, PARTNER_CONTRIBUTION_VALUES } from "@/lib/partners"
 import { z } from "zod"
 
 const PartnerCreateSchema = z.object({
   name: z.string().min(1).max(160),
-  kind: z.enum(["SPONSOR", "INSTITUTION", "SECOURS", "PRESSE", "AUTRE"]).default("SPONSOR"),
+  kind: z.enum(PARTNER_KIND_VALUES).default("SPONSOR"),
+  status: z.enum(PARTNER_STATUS_VALUES).default("A_CONTACTER"),
   contactName: z.string().max(120).nullable().optional(),
   email: z.string().email().nullable().optional(),
   phone: z.string().max(30).nullable().optional(),
   note: z.string().max(500).nullable().optional(),
+  contributions: z.array(z.enum(PARTNER_CONTRIBUTION_VALUES)).optional(),
+  amount: z.number().nonnegative().nullable().optional(),
+  responsibleId: z.string().nullable().optional(),
+  nextContactDate: z.string().datetime().nullable().optional(),
+  wish: z.string().max(500).nullable().optional(),
 })
 
 export async function GET(
@@ -50,15 +57,22 @@ export async function POST(
     if (!parsed.success) {
       return Response.json({ error: "Validation error", issues: parsed.error.issues }, { status: 400 })
     }
+    const d = parsed.data
     const partner = await db.partner.create({
       data: {
         eventId: id,
-        name: parsed.data.name,
-        kind: parsed.data.kind,
-        contactName: parsed.data.contactName ?? null,
-        email: parsed.data.email ?? null,
-        phone: parsed.data.phone ?? null,
-        note: parsed.data.note ?? null,
+        name: d.name,
+        kind: d.kind,
+        status: d.status,
+        contactName: d.contactName ?? null,
+        email: d.email ?? null,
+        phone: d.phone ?? null,
+        note: d.note ?? null,
+        contributions: JSON.stringify(d.contributions ?? []),
+        amount: d.amount ?? null,
+        responsibleId: d.responsibleId ?? null,
+        nextContactDate: d.nextContactDate ? new Date(d.nextContactDate) : null,
+        wish: d.wish ?? null,
       },
     })
     return Response.json(partner, { status: 201 })

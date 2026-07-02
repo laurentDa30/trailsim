@@ -205,11 +205,23 @@ model Partner {
   eventId     String
   event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   name        String
-  kind        String   @default("SPONSOR") // SPONSOR | INSTITUTION | SECOURS | PRESSE | AUTRE
+  kind        String   @default("SPONSOR") // SPONSOR | INSTITUTION | SECOURS | PRESSE | EXPOSANT | AUTRE
   contactName String?
   email       String?
   phone       String?
   note        String?
+  // Prospection pipeline: A_CONTACTER | CONTACTE | REFLEXION | ACCEPTE | CONFIRME | REFUSE
+  status      String   @default("A_CONTACTER")
+  // What they can bring — JSON array of: ARGENT | PRODUITS | SERVICES | PERSONNES | STAND
+  contributions String @default("[]")
+  // Monetary contribution (mécénat / sponsoring), addable to the budget as a gain.
+  amount      Float?
+  // Organiser in charge of this partner (EventMember id or owner userId).
+  responsibleId String?
+  // Next follow-up date ("faut-il retourner le voir et quand").
+  nextContactDate DateTime?
+  // What we'd like to obtain from them.
+  wish        String?
   createdAt   DateTime @default(now())
 }
 

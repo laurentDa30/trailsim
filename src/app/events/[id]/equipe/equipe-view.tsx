@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import {
   UserCogIcon,
-  HandshakeIcon,
   PlusIcon,
   Trash2Icon,
   LinkIcon,
@@ -34,15 +33,6 @@ interface RaceRef {
   distance: number
 }
 
-interface PartnerRow {
-  id: string
-  name: string
-  kind: string
-  contactName: string | null
-  email: string | null
-  phone: string | null
-  note: string | null
-}
 
 interface SectionRow {
   id: string
@@ -56,7 +46,6 @@ interface EquipeViewProps {
   owner: { name: string | null; email: string }
   races: RaceRef[]
   initialMembers: Member[]
-  initialPartners: PartnerRow[]
   initialSections: SectionRow[]
   targetVolunteers: number | null
   canEdit: boolean
@@ -66,14 +55,6 @@ const ROLE_LABELS: Record<string, string> = {
   ORGANISATEUR: 'Organisateur',
   BENEVOLE: 'Bénévole',
 }
-
-const PARTNER_KINDS = [
-  { value: 'SPONSOR', label: 'Sponsor' },
-  { value: 'INSTITUTION', label: 'Institution' },
-  { value: 'SECOURS', label: 'Secours' },
-  { value: 'PRESSE', label: 'Presse' },
-  { value: 'AUTRE', label: 'Autre' },
-]
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--color-bg-2)',
@@ -92,13 +73,11 @@ export function EquipeView({
   owner,
   races,
   initialMembers,
-  initialPartners,
   initialSections,
   targetVolunteers,
   canEdit,
 }: EquipeViewProps) {
   const [members, setMembers] = useState<Member[]>(initialMembers)
-  const [partners, setPartners] = useState<PartnerRow[]>(initialPartners)
   const [sections, setSections] = useState<SectionRow[]>(initialSections)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [target, setTarget] = useState<number | null>(targetVolunteers)
@@ -122,13 +101,6 @@ export function EquipeView({
   // ── Section form ──
   const [sName, setSName] = useState('')
   const [sBusy, setSBusy] = useState(false)
-
-  // ── Partner form ──
-  const [pName, setPName] = useState('')
-  const [pKind, setPKind] = useState('SPONSOR')
-  const [pContact, setPContact] = useState('')
-  const [pPhone, setPPhone] = useState('')
-  const [pBusy, setPBusy] = useState(false)
 
   const organisers = useMemo(() => members.filter((m) => m.role === 'ORGANISATEUR'), [members])
   const volunteers = useMemo(() => members.filter((m) => m.role === 'BENEVOLE'), [members])
@@ -278,40 +250,6 @@ export function EquipeView({
     setSections((prev) => prev.filter((s) => s.id !== id))
     setMembers((prev) => prev.map((m) => (m.sectionId === id ? { ...m, sectionId: null } : m)))
     await fetch(`/api/events/${event.id}/sections/${id}`, { method: 'DELETE' }).catch(() => {})
-  }
-
-  // ── Partner handlers ──
-  async function addPartner(e: React.FormEvent) {
-    e.preventDefault()
-    if (!pName.trim() || pBusy) return
-    setPBusy(true)
-    try {
-      const res = await fetch(`/api/events/${event.id}/partners`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: pName.trim(),
-          kind: pKind,
-          contactName: pContact.trim() || null,
-          phone: pPhone.trim() || null,
-        }),
-      })
-      if (res.ok) {
-        const p = (await res.json()) as PartnerRow
-        setPartners((prev) => [...prev, p])
-        setPName('')
-        setPContact('')
-        setPPhone('')
-      }
-    } finally {
-      setPBusy(false)
-    }
-  }
-
-  async function removePartner(id: string) {
-    if (!confirm('Supprimer ce partenaire ?')) return
-    setPartners((prev) => prev.filter((p) => p.id !== id))
-    await fetch(`/api/events/${event.id}/partners/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   // ── Reusable member row ──
@@ -591,56 +529,6 @@ export function EquipeView({
               )}
             </div>
           </section>
-
-          {/* Partners */}
-          <section className="rounded-xl overflow-hidden" style={{ background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}>
-            <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid var(--color-line)' }}>
-              <span style={{ color: 'var(--color-lime)' }}><HandshakeIcon size={15} /></span>
-              <span className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>Partenaires</span>
-              <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>{partners.length} — sponsors, mairie, secours, presse…</span>
-            </div>
-            <div className="p-4 flex flex-col gap-3">
-              {canEdit && (
-                <form onSubmit={addPartner} className="flex flex-wrap gap-2">
-                  <input value={pName} onChange={(e) => setPName(e.target.value)} placeholder="Nom *" required className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded-md text-xs" style={inputStyle} />
-                  <select value={pKind} onChange={(e) => setPKind(e.target.value)} className="px-2 py-1.5 rounded-md text-xs" style={inputStyle}>
-                    {PARTNER_KINDS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
-                  </select>
-                  <input value={pContact} onChange={(e) => setPContact(e.target.value)} placeholder="Contact" className="flex-1 min-w-[120px] px-2.5 py-1.5 rounded-md text-xs" style={inputStyle} />
-                  <input value={pPhone} onChange={(e) => setPPhone(e.target.value)} placeholder="Téléphone" className="w-32 px-2.5 py-1.5 rounded-md text-xs" style={inputStyle} />
-                  <button type="submit" disabled={pBusy} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium" style={{ background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)', color: 'var(--color-lime)', border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)' }}>
-                    <PlusIcon size={13} /> Ajouter
-                  </button>
-                </form>
-              )}
-              {partners.length === 0 ? (
-                <p className="text-xs" style={{ color: 'var(--color-ink-4)' }}>Aucun partenaire enregistré.</p>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {partners.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'var(--color-bg-2)', border: '1px solid var(--color-line)' }}>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-ink)' }}>{p.name}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] shrink-0" style={{ color: 'var(--color-ink-3)', background: 'var(--color-bg-1)', border: '1px solid var(--color-line)' }}>
-                            {PARTNER_KINDS.find((k) => k.value === p.kind)?.label ?? p.kind}
-                          </span>
-                        </div>
-                        <div className="text-[10.5px] truncate" style={{ color: 'var(--color-ink-4)' }}>
-                          {[p.contactName, p.email, p.phone].filter(Boolean).join(' · ') || '—'}
-                        </div>
-                      </div>
-                      {canEdit && (
-                        <button type="button" onClick={() => removePartner(p.id)} aria-label="Supprimer" className="p-1 rounded shrink-0" style={{ color: 'var(--color-danger, #DC2626)' }}>
-                          <Trash2Icon size={13} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
         </div>
 
         {/* ── Synthesis (right) ── */}
@@ -658,7 +546,6 @@ export function EquipeView({
             <StatRow label="Bénévoles" value={volunteers.length} />
             <StatRow label="Pôles" value={sections.length} />
             <StatRow label="Bénévoles sans pôle" value={unassignedVolunteers.length} color={unassignedVolunteers.length > 0 ? 'var(--color-warning)' : undefined} />
-            <StatRow label="Partenaires" value={partners.length} />
           </div>
 
           {/* Volunteer headcount objective: what's needed vs what's missing. */}

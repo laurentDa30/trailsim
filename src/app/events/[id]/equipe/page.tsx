@@ -30,14 +30,10 @@ export default async function EquipePage({ params }: PageProps) {
   })
   if (!event) notFound()
 
-  const [members, partners, sections] = await Promise.all([
+  const [members, sections] = await Promise.all([
     db.eventMember.findMany({
       where: { eventId: id },
       orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-    }),
-    db.partner.findMany({
-      where: { eventId: id },
-      orderBy: [{ kind: 'asc' }, { createdAt: 'asc' }],
     }),
     db.section.findMany({
       where: { eventId: id },
@@ -76,15 +72,6 @@ export default async function EquipePage({ params }: PageProps) {
           note: m.note,
         }
       })}
-      initialPartners={partners.map((p) => ({
-        id: p.id,
-        name: p.name,
-        kind: p.kind,
-        contactName: p.contactName,
-        email: p.email,
-        phone: p.phone,
-        note: p.note,
-      }))}
       initialSections={sections.map((s) => ({
         id: s.id,
         name: s.name,

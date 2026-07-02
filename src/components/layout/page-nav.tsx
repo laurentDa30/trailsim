@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useRef, useEffect } from 'react'
-import { LayoutDashboard, Settings, Play, BarChart2, Users, ClipboardList, Wallet, Menu } from 'lucide-react'
+import { LayoutDashboard, Settings, Play, BarChart2, Users, ClipboardList, Wallet, Handshake, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -24,6 +24,7 @@ function buildItems(eventId?: string): NavItem[] {
     { key: 'simulate', label: 'Simulation', href: eventId ? `/events/${eventId}/simulate` : '#', icon: <Play size={14} /> },
     { key: 'results', label: 'Résultats', href: eventId ? `/events/${eventId}/results` : '#', icon: <BarChart2 size={14} /> },
     { key: 'equipe', label: 'Équipe', href: eventId ? `/events/${eventId}/equipe` : '#', icon: <Users size={14} /> },
+    { key: 'partenaires', label: 'Partenaires', href: eventId ? `/events/${eventId}/partenaires` : '#', icon: <Handshake size={14} /> },
     { key: 'budget', label: 'Budget', href: eventId ? `/events/${eventId}/budget` : '#', icon: <Wallet size={14} /> },
     { key: 'taches', label: 'Tâches', href: eventId ? `/events/${eventId}/taches` : '#', icon: <ClipboardList size={14} /> },
   ]
