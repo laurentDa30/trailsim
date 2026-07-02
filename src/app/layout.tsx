@@ -9,9 +9,23 @@ const inter = Inter({
   display: "swap",
 })
 
+const APP_DESCRIPTION =
+  "Simulation de peloton et planification logistique pour l'organisation de vos courses de trail."
+
 export const metadata: Metadata = {
   title: "TrailSim",
-  description: "Trail race simulation and logistics planning tool",
+  description: APP_DESCRIPTION,
+  openGraph: {
+    title: "TrailSim",
+    description: APP_DESCRIPTION,
+    locale: "fr_FR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "TrailSim",
+    description: APP_DESCRIPTION,
+  },
 }
 
 // Applied before paint to avoid a theme flash
