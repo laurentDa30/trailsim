@@ -31,6 +31,7 @@ export default async function PartenairesPage({ params }: PageProps) {
   const partners = await db.partner.findMany({
     where: { eventId: id },
     orderBy: [{ createdAt: 'asc' }],
+    include: { interactions: { orderBy: { date: 'desc' } } },
   })
 
   // People a partner can be assigned to: the owner (organiser) + bureau members.
@@ -74,6 +75,13 @@ export default async function PartenairesPage({ params }: PageProps) {
           responsibleId: p.responsibleId,
           nextContactDate: p.nextContactDate ? p.nextContactDate.toISOString() : null,
           wish: p.wish,
+          budgetGainId: p.budgetGainId,
+          interactions: p.interactions.map((it) => ({
+            id: it.id,
+            date: it.date.toISOString(),
+            by: it.by,
+            note: it.note,
+          })),
         }
       })}
       members={members}

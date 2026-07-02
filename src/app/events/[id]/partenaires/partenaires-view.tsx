@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
-import { HandshakeIcon, PlusIcon, Trash2Icon, ChevronDownIcon, ChevronRightIcon, BellIcon } from 'lucide-react'
+import { HandshakeIcon, PlusIcon, Trash2Icon, ChevronDownIcon, ChevronRightIcon, BellIcon, WalletIcon } from 'lucide-react'
 import {
   PARTNER_KINDS,
   PARTNER_STATUSES,
@@ -10,6 +10,13 @@ import {
   partnerKindMeta,
   partnerStatusMeta,
 } from '@/lib/partners'
+
+interface Interaction {
+  id: string
+  date: string
+  by: string | null
+  note: string
+}
 
 interface Partner {
   id: string
@@ -25,6 +32,8 @@ interface Partner {
   responsibleId: string | null
   nextContactDate: string | null
   wish: string | null
+  budgetGainId: string | null
+  interactions: Interaction[]
 }
 
 interface PartenairesViewProps {
@@ -75,7 +84,42 @@ export function PartenairesView({ event, initialPartners, members, canEdit }: Pa
     }).catch(() => null)
     if (res && res.ok) {
       const p = (await res.json()) as Partner
-      setPartners((prev) => [...prev, { ...p, contributions: p.contributions ?? [] }])
+      setPartners((prev) => [...prev, { ...p, contributions: p.contributions ?? [], interactions: [] }])
+    }
+  }
+
+  async function addInteraction(partnerId: string, note: string, by: string | null) {
+    const res = await fetch(`/api/events/${event.id}/partners/${partnerId}/interactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note, by }),
+    }).catch(() => null)
+    if (res && res.ok) {
+      const it = (await res.json()) as Interaction
+      setPartners((prev) =>
+        prev.map((p) => (p.id === partnerId ? { ...p, interactions: [it, ...p.interactions] } : p))
+      )
+    }
+  }
+
+  function removeInteraction(partnerId: string, interactionId: string) {
+    setPartners((prev) =>
+      prev.map((p) =>
+        p.id === partnerId ? { ...p, interactions: p.interactions.filter((i) => i.id !== interactionId) } : p
+      )
+    )
+    fetch(`/api/events/${event.id}/partners/${partnerId}/interactions/${interactionId}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  async function addToBudget(partner: Partner) {
+    const res = await fetch(`/api/events/${event.id}/budget`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'GAIN', label: partner.name, estimated: partner.amount ?? 0 }),
+    }).catch(() => null)
+    if (res && res.ok) {
+      const gain = (await res.json()) as { id: string }
+      patchPartner(partner.id, { budgetGainId: gain.id })
     }
   }
 
@@ -146,6 +190,9 @@ export function PartenairesView({ event, initialPartners, members, canEdit }: Pa
                       responsibleName={memberName(p.responsibleId)}
                       onPatch={(b) => patchPartner(p.id, b)}
                       onRemove={() => removePartner(p.id)}
+                      onAddInteraction={(note, by) => addInteraction(p.id, note, by)}
+                      onRemoveInteraction={(iid) => removeInteraction(p.id, iid)}
+                      onAddToBudget={() => addToBudget(p)}
                     />
                   ))}
                 </div>
@@ -176,6 +223,9 @@ function PartnerCard({
   responsibleName,
   onPatch,
   onRemove,
+  onAddInteraction,
+  onRemoveInteraction,
+  onAddToBudget,
 }: {
   partner: Partner
   canEdit: boolean
@@ -183,7 +233,13 @@ function PartnerCard({
   responsibleName: string | null
   onPatch: (body: Partial<Partner>) => void
   onRemove: () => void
+  onAddInteraction: (note: string, by: string | null) => void
+  onRemoveInteraction: (interactionId: string) => void
+  onAddToBudget: () => void
 }) {
+  const [itNote, setItNote] = useState('')
+  const [itBy, setItBy] = useState('')
+  const canAddToBudget = partner.contributions.includes('ARGENT') && (partner.amount ?? 0) > 0
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(partner.name)
   const [amount, setAmount] = useState(partner.amount != null ? String(partner.amount) : '')
@@ -321,6 +377,24 @@ function PartnerCard({
         ) : null}
 
         {overdue && <span className="font-semibold" style={{ color: 'var(--color-warning)' }}>à relancer</span>}
+
+        {canEdit && canAddToBudget && (
+          partner.budgetGainId ? (
+            <span className="flex items-center gap-1" style={{ color: 'var(--color-safe, #16A34A)' }}>
+              <WalletIcon size={11} /> Ajouté au budget
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onAddToBudget}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium"
+              style={{ background: 'color-mix(in oklab, var(--color-lime) 16%, transparent)', border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)', color: 'var(--color-lime)' }}
+              title="Créer une ligne de gain dans le budget"
+            >
+              <WalletIcon size={11} /> Ajouter au budget
+            </button>
+          )
+        )}
       </div>
 
       {/* Details toggle */}
@@ -353,6 +427,42 @@ function PartnerCard({
               {partner.note && <span>{partner.note}</span>}
             </div>
           )}
+
+          {/* Journal des échanges */}
+          <div className="sm:col-span-2 flex flex-col gap-1.5 pt-1 mt-1 border-t" style={{ borderColor: 'var(--color-line)' }}>
+            <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-ink-4)' }}>Journal des échanges</span>
+            {partner.interactions.length === 0 && (
+              <span className="text-[11px]" style={{ color: 'var(--color-ink-4)' }}>Aucun échange noté.</span>
+            )}
+            {partner.interactions.map((it) => (
+              <div key={it.id} className="flex items-start gap-2 text-[11px]">
+                <span className="font-mono shrink-0" style={{ color: 'var(--color-ink-4)' }}>
+                  {new Date(it.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                </span>
+                <span className="flex-1" style={{ color: 'var(--color-ink-2)' }}>
+                  {it.by && <b style={{ color: 'var(--color-ink-3)' }}>{it.by} · </b>}
+                  {it.note}
+                </span>
+                {canEdit && (
+                  <button type="button" onClick={() => onRemoveInteraction(it.id)} aria-label="Supprimer" style={{ color: 'var(--color-ink-4)' }}>
+                    <Trash2Icon size={11} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {canEdit && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); const n = itNote.trim(); if (!n) return; onAddInteraction(n, itBy.trim() || null); setItNote(''); setItBy('') }}
+                className="flex flex-wrap gap-1.5 mt-0.5"
+              >
+                <input value={itBy} onChange={(e) => setItBy(e.target.value)} placeholder="Par (qui)" className="w-24 rounded px-2 py-1 text-[11px]" style={inputStyle} />
+                <input value={itNote} onChange={(e) => setItNote(e.target.value)} placeholder="Échange, réponse…" className="flex-1 min-w-[140px] rounded px-2 py-1 text-[11px]" style={inputStyle} />
+                <button type="submit" className="px-2.5 py-1 rounded text-[11px] font-medium" style={{ background: 'color-mix(in oklab, var(--color-lime) 18%, transparent)', color: 'var(--color-lime)', border: '1px solid color-mix(in oklab, var(--color-lime) 35%, transparent)' }}>
+                  Noter
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       )}
     </div>

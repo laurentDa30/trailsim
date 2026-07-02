@@ -17,6 +17,7 @@ const PartnerPatchSchema = z.object({
   responsibleId: z.string().nullable().optional(),
   nextContactDate: z.string().datetime().nullable().optional(),
   wish: z.string().max(500).nullable().optional(),
+  budgetGainId: z.string().nullable().optional(),
 })
 
 async function authorize(sessionUserId: string, eventId: string, partnerId: string) {

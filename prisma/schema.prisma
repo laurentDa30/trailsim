@@ -222,7 +222,22 @@ model Partner {
   nextContactDate DateTime?
   // What we'd like to obtain from them.
   wish        String?
+  // Once a mécénat amount is pushed to the budget as a gain, its id is kept here
+  // to avoid duplicates and show an "added" state.
+  budgetGainId String?
+  interactions PartnerInteraction[]
   createdAt   DateTime @default(now())
+}
+
+// One logged exchange with a partner (timeline): when, who did it, what happened.
+model PartnerInteraction {
+  id        String   @id @default(cuid())
+  partnerId String
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  date      DateTime @default(now())
+  by        String?  // qui a contacté / rencontré
+  note      String   // échange / réponse
+  createdAt DateTime @default(now())
 }
 
 model Race {
