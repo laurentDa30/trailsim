@@ -53,6 +53,21 @@ function fmtMoney(n: number): string {
   return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' €'
 }
 
+// The API stores `contributions` as a JSON string, so a POST/PATCH response may
+// hand it back as a string ("[]") rather than an array. Normalise to an array.
+function parseContributions(value: unknown): string[] {
+  if (Array.isArray(value)) return value as string[]
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? (parsed as string[]) : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
 function daysUntil(iso: string): number {
   const d = new Date(iso)
   const today = new Date()
@@ -84,7 +99,7 @@ export function PartenairesView({ event, initialPartners, members, canEdit }: Pa
     }).catch(() => null)
     if (res && res.ok) {
       const p = (await res.json()) as Partner
-      setPartners((prev) => [...prev, { ...p, contributions: p.contributions ?? [], interactions: [] }])
+      setPartners((prev) => [...prev, { ...p, contributions: parseContributions(p.contributions), interactions: [] }])
     }
   }
 
@@ -255,9 +270,8 @@ function PartnerCard({
   const overdue = !FINAL.has(partner.status) && relanceDays != null && relanceDays <= 0
 
   function toggleContribution(v: string) {
-    const next = partner.contributions.includes(v)
-      ? partner.contributions.filter((c) => c !== v)
-      : [...partner.contributions, v]
+    const current = Array.isArray(partner.contributions) ? partner.contributions : []
+    const next = current.includes(v) ? current.filter((c) => c !== v) : [...current, v]
     onPatch({ contributions: next })
   }
 
