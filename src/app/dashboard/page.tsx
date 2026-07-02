@@ -55,6 +55,9 @@ export default async function DashboardPage() {
         where: { type: "DEPENSE" },
         select: { estimated: true, paid: true },
       },
+      partners: {
+        select: { status: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   })
@@ -65,10 +68,17 @@ export default async function DashboardPage() {
   const taskStatsMap = new Map<string, { overdue: number; pending: number; done: number }>()
   const volunteerMap = new Map<string, { validated: number; total: number }>()
   const budgetMap = new Map<string, { estimated: number; real: number }>()
+  const partnerMap = new Map<string, { accepted: number; total: number }>()
   for (const e of events) {
     const estimated = e.budgetItems.reduce((s, b) => s + b.estimated, 0)
     const real = e.budgetItems.reduce((s, b) => s + b.paid, 0)
     budgetMap.set(e.id, { estimated, real })
+
+    // Partenaires : "acceptés" = statut Accepté ou Confirmé.
+    const acceptedPartners = e.partners.filter(
+      (p) => p.status === "ACCEPTE" || p.status === "CONFIRME"
+    ).length
+    partnerMap.set(e.id, { accepted: acceptedPartners, total: e.partners.length })
     let overdue = 0
     let pending = 0
     let done = 0
@@ -251,6 +261,7 @@ export default async function DashboardPage() {
                 taskStats={taskStatsMap.get(event.id) ?? null}
                 volunteers={volunteerMap.get(event.id) ?? null}
                 budget={budgetMap.get(event.id) ?? null}
+                partners={partnerMap.get(event.id) ?? null}
                 races={event.races}
                 totalRunners={event.simulations[0]?.totalRunners ?? 0}
                 latestSimulation={
